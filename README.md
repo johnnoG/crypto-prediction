@@ -1,2 +1,3 @@
-# crypto-prediction
-Our degree final project
+# Crypto Prediction Monorepo
+
+Monorepo for data preprocessing, model training, API, UI & infra.

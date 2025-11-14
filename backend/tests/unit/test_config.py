@@ -177,7 +177,9 @@ class TestEnvironmentVariables:
     def test_cors_origins_from_env(self, monkeypatch):
         """Test loading CORS origins from environment."""
         # pydantic-settings 2.6+ expects JSON format for List fields
-        monkeypatch.setenv("CORS_ORIGINS", '["http://example.com", "https://api.example.com"]')
+        monkeypatch.setenv(
+            "CORS_ORIGINS", '["http://example.com", "https://api.example.com"]'
+        )
 
         settings = Settings()
         assert len(settings.cors_origins) == 2

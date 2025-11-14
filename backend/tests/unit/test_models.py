@@ -268,4 +268,8 @@ class TestModelConstraints:
         constraint_names = [c.name for c in constraints if hasattr(c, "name")]
 
         # Check that the constraint exists (name may be prefixed with table name)
-        assert any("ck_prediction_target_after_prediction" in name for name in constraint_names if name)
+        assert any(
+            "ck_prediction_target_after_prediction" in name
+            for name in constraint_names
+            if name
+        )

@@ -263,8 +263,9 @@ class TestModelConstraints:
         """Test that target_timestamp must be after prediction_timestamp."""
         from app.models.prediction import Prediction as PredictionModel
 
-        # Check constraint exists - the constraint name is ck_prediction_target_after_prediction
+        # Check constraint exists - SQLAlchemy 2.0 prefixes with table name
         constraints = PredictionModel.__table__.constraints
         constraint_names = [c.name for c in constraints if hasattr(c, "name")]
 
-        assert "ck_prediction_target_after_prediction" in constraint_names
+        # Check that the constraint exists (name may be prefixed with table name)
+        assert any("ck_prediction_target_after_prediction" in name for name in constraint_names if name)

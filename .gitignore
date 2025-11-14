@@ -154,6 +154,11 @@ credentials.json
 # Kubernetes
 *.kubeconfig
 
-#tasks summary files
-SCRUM-*.md
-CI-CD-COMPLETION.md
+# Documentation - Allow docs/ folder but exclude from root
+/*.md
+!README.md
+
+# Exclude completion reports from root
+/SCRUM-*.md
+/CI-CD-*.md
+/TEST-*.md

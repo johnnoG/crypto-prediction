@@ -44,7 +44,7 @@ class MarketData(Base):
 
     __tablename__ = "market_data"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True, index=True)
     cryptocurrency_id = Column(
         Integer,
         ForeignKey("cryptocurrencies.id", ondelete="CASCADE"),

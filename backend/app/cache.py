@@ -107,7 +107,7 @@ class CacheManager:
                 self._redis.set(key, serialized_value)
             logger.debug(f"Cached key '{key}' with TTL {ttl}s")
             return True
-        except (RedisError, json.JSONEncodeError, TypeError) as e:
+        except (RedisError, TypeError, ValueError) as e:
             logger.warning(f"Failed to set cache key '{key}': {e}")
             return False
 
@@ -213,16 +213,25 @@ class CacheManager:
             # Ping Redis
             latency_ms = self._redis.ping()
 
-            # Get basic info
-            info = self._redis.info()
+            # Get basic info (handle fakeredis which may not support all INFO commands)
+            try:
+                info = self._redis.info()
+                used_memory_mb = round(info.get("used_memory", 0) / 1024 / 1024, 2)
+                connected_clients = info.get("connected_clients", 0)
+                uptime_seconds = info.get("uptime_in_seconds", 0)
+            except (RedisError, AttributeError):
+                # Fallback for fakeredis or limited Redis implementations
+                used_memory_mb = 0
+                connected_clients = 1
+                uptime_seconds = 0
 
             return {
                 "status": "healthy",
                 "connected": True,
                 "latency_ms": latency_ms,
-                "used_memory_mb": round(info.get("used_memory", 0) / 1024 / 1024, 2),
-                "connected_clients": info.get("connected_clients", 0),
-                "uptime_seconds": info.get("uptime_in_seconds", 0),
+                "used_memory_mb": used_memory_mb,
+                "connected_clients": connected_clients,
+                "uptime_seconds": uptime_seconds,
             }
         except RedisError as e:
             logger.error(f"Redis health check failed: {e}")

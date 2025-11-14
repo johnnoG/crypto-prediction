@@ -89,7 +89,7 @@ async def database_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
 
 @router.get("/health/cache", status_code=status.HTTP_200_OK)
 async def cache_health_check(
-    cache: CacheManager = Depends(get_cache)
+    cache: CacheManager = Depends(get_cache),
 ) -> Dict[str, Any]:
     """
     Redis cache health check endpoint.

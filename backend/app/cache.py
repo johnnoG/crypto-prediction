@@ -84,12 +84,7 @@ class CacheManager:
             logger.warning(f"Failed to get cache key '{key}': {e}")
             return None
 
-    def set(
-        self,
-        key: str,
-        value: Any,
-        ttl: Optional[int] = None
-    ) -> bool:
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """
         Store a value in cache with optional TTL.
 

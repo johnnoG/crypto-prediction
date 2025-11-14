@@ -6,8 +6,16 @@ Stores model predictions for cryptocurrency prices.
 
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey,
-    Index, BigInteger, CheckConstraint, JSON
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    ForeignKey,
+    Index,
+    BigInteger,
+    CheckConstraint,
+    JSON,
 )
 from sqlalchemy.orm import relationship
 
@@ -43,7 +51,7 @@ class Prediction(Base):
         Integer,
         ForeignKey("cryptocurrencies.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     prediction_timestamp = Column(DateTime, nullable=False, index=True)
     target_timestamp = Column(DateTime, nullable=False, index=True)
@@ -62,33 +70,28 @@ class Prediction(Base):
     # Constraints
     __table_args__ = (
         # Performance indexes
-        Index(
-            "idx_prediction_crypto_target",
-            "cryptocurrency_id",
-            "target_timestamp"
-        ),
+        Index("idx_prediction_crypto_target", "cryptocurrency_id", "target_timestamp"),
         Index(
             "idx_prediction_crypto_prediction_time",
             "cryptocurrency_id",
-            "prediction_timestamp"
+            "prediction_timestamp",
         ),
         Index("idx_prediction_model", "model_name", "model_version"),
         # Data validation constraints
         CheckConstraint(
-            "predicted_price >= 0",
-            name="ck_prediction_predicted_price_positive"
+            "predicted_price >= 0", name="ck_prediction_predicted_price_positive"
         ),
         CheckConstraint(
             "confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)",
-            name="ck_prediction_confidence_range"
+            name="ck_prediction_confidence_range",
         ),
         CheckConstraint(
             "actual_price IS NULL OR actual_price >= 0",
-            name="ck_prediction_actual_price_positive"
+            name="ck_prediction_actual_price_positive",
         ),
         CheckConstraint(
             "target_timestamp > prediction_timestamp",
-            name="ck_prediction_target_after_prediction"
+            name="ck_prediction_target_after_prediction",
         ),
     )
 

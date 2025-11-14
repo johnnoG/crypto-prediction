@@ -19,7 +19,7 @@ NAMING_CONVENTION = {
     "uq": "uq_%(table_name)s_%(column_0_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    "pk": "pk_%(table_name)s"
+    "pk": "pk_%(table_name)s",
 }
 
 # Metadata with naming convention
@@ -43,11 +43,16 @@ def set_postgres_pragma(dbapi_connection, connection_record):
     Set PostgreSQL connection parameters on new connections.
 
     This ensures optimal settings for each connection in the pool.
+    Only applies to PostgreSQL connections.
     """
-    cursor = dbapi_connection.cursor()
-    # Set statement timeout to prevent long-running queries
-    cursor.execute("SET statement_timeout = '30s'")
-    cursor.close()
+    # Only run PostgreSQL-specific commands for PostgreSQL connections
+    if hasattr(dbapi_connection, "server_version"):  # PostgreSQL connection
+        cursor = dbapi_connection.cursor()
+        try:
+            # Set statement timeout to prevent long-running queries
+            cursor.execute("SET statement_timeout = '30s'")
+        finally:
+            cursor.close()
 
 
 # Session factory
@@ -55,7 +60,7 @@ SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=engine,
-    expire_on_commit=False  # Prevent lazy loading errors after commit
+    expire_on_commit=False,  # Prevent lazy loading errors after commit
 )
 
 # Base class for models

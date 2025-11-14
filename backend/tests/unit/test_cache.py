@@ -140,7 +140,7 @@ class TestCacheManager:
             "float": 45.67,
             "bool": True,
             "list": [1, 2, 3],
-            "nested": {"key": "value"}
+            "nested": {"key": "value"},
         }
 
         test_cache.set(key, value)
@@ -201,6 +201,7 @@ class TestCachePatterns:
     @pytest.mark.cache
     def test_cache_aside_pattern(self, test_cache: CacheManager):
         """Test cache-aside (lazy loading) pattern."""
+
         def get_data_from_db(key: str) -> dict:
             """Simulate database fetch."""
             return {"data": f"value_for_{key}"}

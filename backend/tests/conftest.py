@@ -92,6 +92,7 @@ def client(db: Session, test_cache: CacheManager) -> Generator[TestClient, None,
     Yields:
         TestClient: FastAPI test client
     """
+
     def override_get_db():
         try:
             yield db
@@ -108,14 +109,12 @@ def client(db: Session, test_cache: CacheManager) -> Generator[TestClient, None,
 
 # Sample Data Fixtures
 
+
 @pytest.fixture
 def sample_cryptocurrency(db: Session) -> Cryptocurrency:
     """Create a sample cryptocurrency for testing."""
     crypto = Cryptocurrency(
-        symbol="BTC",
-        name="Bitcoin",
-        coin_gecko_id="bitcoin",
-        is_active=True
+        symbol="BTC", name="Bitcoin", coin_gecko_id="bitcoin", is_active=True
     )
     db.add(crypto)
     db.commit()
@@ -127,9 +126,15 @@ def sample_cryptocurrency(db: Session) -> Cryptocurrency:
 def sample_cryptocurrencies(db: Session) -> list[Cryptocurrency]:
     """Create multiple sample cryptocurrencies."""
     cryptos = [
-        Cryptocurrency(symbol="BTC", name="Bitcoin", coin_gecko_id="bitcoin", is_active=True),
-        Cryptocurrency(symbol="ETH", name="Ethereum", coin_gecko_id="ethereum", is_active=True),
-        Cryptocurrency(symbol="SOL", name="Solana", coin_gecko_id="solana", is_active=True),
+        Cryptocurrency(
+            symbol="BTC", name="Bitcoin", coin_gecko_id="bitcoin", is_active=True
+        ),
+        Cryptocurrency(
+            symbol="ETH", name="Ethereum", coin_gecko_id="ethereum", is_active=True
+        ),
+        Cryptocurrency(
+            symbol="SOL", name="Solana", coin_gecko_id="solana", is_active=True
+        ),
     ]
     db.add_all(cryptos)
     db.commit()
@@ -139,7 +144,9 @@ def sample_cryptocurrencies(db: Session) -> list[Cryptocurrency]:
 
 
 @pytest.fixture
-def sample_market_data(db: Session, sample_cryptocurrency: Cryptocurrency) -> MarketData:
+def sample_market_data(
+    db: Session, sample_cryptocurrency: Cryptocurrency
+) -> MarketData:
     """Create sample market data."""
     market_data = MarketData(
         cryptocurrency_id=sample_cryptocurrency.id,
@@ -150,7 +157,7 @@ def sample_market_data(db: Session, sample_cryptocurrency: Cryptocurrency) -> Ma
         close_price=45500.0,
         volume=1000000000.0,
         market_cap=900000000000.0,
-        data_source="test"
+        data_source="test",
     )
     db.add(market_data)
     db.commit()
@@ -159,7 +166,9 @@ def sample_market_data(db: Session, sample_cryptocurrency: Cryptocurrency) -> Ma
 
 
 @pytest.fixture
-def sample_market_data_series(db: Session, sample_cryptocurrency: Cryptocurrency) -> list[MarketData]:
+def sample_market_data_series(
+    db: Session, sample_cryptocurrency: Cryptocurrency
+) -> list[MarketData]:
     """Create a time series of market data."""
     base_time = datetime.utcnow() - timedelta(days=7)
     data_points = []
@@ -174,7 +183,7 @@ def sample_market_data_series(db: Session, sample_cryptocurrency: Cryptocurrency
             close_price=45500.0 + i * 100,
             volume=1000000000.0,
             market_cap=900000000000.0,
-            data_source="test"
+            data_source="test",
         )
         data_points.append(market_data)
 
@@ -197,7 +206,7 @@ def sample_prediction(db: Session, sample_cryptocurrency: Cryptocurrency) -> Pre
         confidence_score=0.85,
         model_name="LSTM-v1",
         model_version="1.0.0",
-        features_used={"feature1": 1.0, "feature2": 2.0}
+        features_used={"feature1": 1.0, "feature2": 2.0},
     )
     db.add(prediction)
     db.commit()
@@ -206,6 +215,7 @@ def sample_prediction(db: Session, sample_cryptocurrency: Cryptocurrency) -> Pre
 
 
 # Cleanup fixtures
+
 
 @pytest.fixture(autouse=True)
 def reset_db():

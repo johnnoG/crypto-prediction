@@ -199,9 +199,7 @@ class TestConfigurationProfiles:
     def test_production_profile(self):
         """Test production configuration."""
         settings = Settings(
-            debug=False,
-            log_level="INFO",
-            secret_key="a" * 64  # Strong secret
+            debug=False, log_level="INFO", secret_key="a" * 64  # Strong secret
         )
 
         assert settings.debug is False
@@ -212,9 +210,7 @@ class TestConfigurationProfiles:
     def test_production_checklist(self):
         """Test that production settings are secure."""
         settings = Settings(
-            debug=False,
-            secret_key="a" * 64,
-            cors_origins=["https://production.com"]
+            debug=False, secret_key="a" * 64, cors_origins=["https://production.com"]
         )
 
         # Debug should be off

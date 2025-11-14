@@ -137,8 +137,10 @@ class TestHealthCheckResponses:
         data = response.json()
 
         # If both DB and cache are healthy, overall should be healthy
-        if (data["database"]["status"] == "healthy" and
-            data["cache"]["status"] == "healthy"):
+        if (
+            data["database"]["status"] == "healthy"
+            and data["cache"]["status"] == "healthy"
+        ):
             assert data["status"] == "healthy"
 
         # If DB is unhealthy, overall should be unhealthy
@@ -171,6 +173,7 @@ class TestHealthCheckEdgeCases:
         timestamp1 = datetime.fromisoformat(response1.json()["timestamp"])
 
         import time
+
         time.sleep(0.1)  # Small delay
 
         response2 = client.get("/health")

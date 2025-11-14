@@ -22,10 +22,7 @@ class TestCryptocurrencyModel:
     def test_create_cryptocurrency(self, db: Session):
         """Test creating a cryptocurrency."""
         crypto = Cryptocurrency(
-            symbol="BTC",
-            name="Bitcoin",
-            coin_gecko_id="bitcoin",
-            is_active=True
+            symbol="BTC", name="Bitcoin", coin_gecko_id="bitcoin", is_active=True
         )
         db.add(crypto)
         db.commit()
@@ -61,14 +58,21 @@ class TestCryptocurrencyModel:
         assert "Bitcoin" in repr_str
 
     @pytest.mark.unit
-    def test_cryptocurrency_relationships(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_cryptocurrency_relationships(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test relationships with market data and predictions."""
         # Create market data
         market_data = MarketData(
             cryptocurrency_id=sample_cryptocurrency.id,
             timestamp=datetime.utcnow(),
-            open_price=45000, high_price=46000, low_price=44000, close_price=45500,
-            volume=1000000, market_cap=900000000, data_source="test"
+            open_price=45000,
+            high_price=46000,
+            low_price=44000,
+            close_price=45500,
+            volume=1000000,
+            market_cap=900000000,
+            data_source="test",
         )
         db.add(market_data)
 
@@ -77,8 +81,10 @@ class TestCryptocurrencyModel:
             cryptocurrency_id=sample_cryptocurrency.id,
             prediction_timestamp=datetime.utcnow(),
             target_timestamp=datetime.utcnow() + timedelta(hours=24),
-            predicted_price=46000, confidence_score=0.85,
-            model_name="test", model_version="1.0"
+            predicted_price=46000,
+            confidence_score=0.85,
+            model_name="test",
+            model_version="1.0",
         )
         db.add(prediction)
         db.commit()
@@ -93,7 +99,9 @@ class TestMarketDataModel:
     """Test cases for MarketData model."""
 
     @pytest.mark.unit
-    def test_create_market_data(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_create_market_data(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test creating market data."""
         market_data = MarketData(
             cryptocurrency_id=sample_cryptocurrency.id,
@@ -104,7 +112,7 @@ class TestMarketDataModel:
             close_price=45500.0,
             volume=1000000000.0,
             market_cap=900000000000.0,
-            data_source="test"
+            data_source="test",
         )
         db.add(market_data)
         db.commit()
@@ -119,15 +127,22 @@ class TestMarketDataModel:
         assert market_data.volume == 1000000000.0
 
     @pytest.mark.unit
-    def test_market_data_unique_timestamp(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_market_data_unique_timestamp(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test that timestamp must be unique per cryptocurrency."""
         timestamp = datetime.utcnow()
 
         data1 = MarketData(
             cryptocurrency_id=sample_cryptocurrency.id,
             timestamp=timestamp,
-            open_price=45000, high_price=46000, low_price=44000, close_price=45500,
-            volume=1000000, market_cap=900000000, data_source="test"
+            open_price=45000,
+            high_price=46000,
+            low_price=44000,
+            close_price=45500,
+            volume=1000000,
+            market_cap=900000000,
+            data_source="test",
         )
         db.add(data1)
         db.commit()
@@ -135,8 +150,13 @@ class TestMarketDataModel:
         data2 = MarketData(
             cryptocurrency_id=sample_cryptocurrency.id,
             timestamp=timestamp,  # Same timestamp
-            open_price=46000, high_price=47000, low_price=45000, close_price=46500,
-            volume=2000000, market_cap=1000000000, data_source="test"
+            open_price=46000,
+            high_price=47000,
+            low_price=45000,
+            close_price=46500,
+            volume=2000000,
+            market_cap=1000000000,
+            data_source="test",
         )
         db.add(data2)
 
@@ -151,7 +171,9 @@ class TestMarketDataModel:
         assert str(sample_market_data.close_price) in repr_str
 
     @pytest.mark.unit
-    def test_market_data_relationship(self, db: Session, sample_market_data: MarketData):
+    def test_market_data_relationship(
+        self, db: Session, sample_market_data: MarketData
+    ):
         """Test relationship to cryptocurrency."""
         assert sample_market_data.cryptocurrency is not None
         assert sample_market_data.cryptocurrency.symbol == "BTC"
@@ -161,7 +183,9 @@ class TestPredictionModel:
     """Test cases for Prediction model."""
 
     @pytest.mark.unit
-    def test_create_prediction(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_create_prediction(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test creating a prediction."""
         now = datetime.utcnow()
         prediction = Prediction(
@@ -172,7 +196,7 @@ class TestPredictionModel:
             confidence_score=0.85,
             model_name="LSTM-v1",
             model_version="1.0.0",
-            features_used={"feature1": 1.0}
+            features_used={"feature1": 1.0},
         )
         db.add(prediction)
         db.commit()
@@ -186,7 +210,9 @@ class TestPredictionModel:
         assert prediction.features_used == {"feature1": 1.0}
 
     @pytest.mark.unit
-    def test_prediction_calculate_error(self, db: Session, sample_prediction: Prediction):
+    def test_prediction_calculate_error(
+        self, db: Session, sample_prediction: Prediction
+    ):
         """Test error calculation."""
         # Set actual price
         sample_prediction.actual_price = 46500.0
@@ -215,7 +241,9 @@ class TestModelConstraints:
     """Test database constraints on models."""
 
     @pytest.mark.unit
-    def test_market_data_price_constraints(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_market_data_price_constraints(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test that prices must be positive and high >= low."""
         # Note: SQLite doesn't enforce CHECK constraints by default,
         # so this test verifies the constraint exists in the model definition
@@ -223,18 +251,20 @@ class TestModelConstraints:
 
         # Check that table has constraints defined
         constraints = MarketDataModel.__table__.constraints
-        constraint_names = [c.name for c in constraints if hasattr(c, 'name')]
+        constraint_names = [c.name for c in constraints if hasattr(c, "name")]
 
         # Verify constraint names exist
-        assert any('price' in name for name in constraint_names if name)
+        assert any("price" in name for name in constraint_names if name)
 
     @pytest.mark.unit
-    def test_prediction_timestamp_order(self, db: Session, sample_cryptocurrency: Cryptocurrency):
+    def test_prediction_timestamp_order(
+        self, db: Session, sample_cryptocurrency: Cryptocurrency
+    ):
         """Test that target_timestamp must be after prediction_timestamp."""
         from app.models.prediction import Prediction as PredictionModel
 
         # Check constraint exists
         constraints = PredictionModel.__table__.constraints
-        constraint_names = [c.name for c in constraints if hasattr(c, 'name')]
+        constraint_names = [c.name for c in constraints if hasattr(c, "name")]
 
-        assert any('timestamp' in name.lower() for name in constraint_names if name)
+        assert any("timestamp" in name.lower() for name in constraint_names if name)

@@ -6,8 +6,15 @@ Represents historical and real-time cryptocurrency market data.
 
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey,
-    Index, BigInteger, CheckConstraint
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    ForeignKey,
+    Index,
+    BigInteger,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -42,7 +49,7 @@ class MarketData(Base):
         Integer,
         ForeignKey("cryptocurrencies.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     timestamp = Column(DateTime, nullable=False, index=True)
     open_price = Column(Float, nullable=False)
@@ -64,7 +71,7 @@ class MarketData(Base):
             "idx_market_data_crypto_timestamp",
             "cryptocurrency_id",
             "timestamp",
-            unique=True
+            unique=True,
         ),
         # Performance indexes
         Index("idx_market_data_timestamp", "timestamp"),
@@ -75,10 +82,7 @@ class MarketData(Base):
         CheckConstraint("low_price >= 0", name="ck_market_data_low_price_positive"),
         CheckConstraint("close_price >= 0", name="ck_market_data_close_price_positive"),
         CheckConstraint("volume >= 0", name="ck_market_data_volume_positive"),
-        CheckConstraint(
-            "high_price >= low_price",
-            name="ck_market_data_high_gte_low"
-        ),
+        CheckConstraint("high_price >= low_price", name="ck_market_data_high_gte_low"),
     )
 
     def __repr__(self) -> str:

@@ -37,28 +37,19 @@ class Cryptocurrency(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
     # Relationships
     market_data = relationship(
-        "MarketData",
-        back_populates="cryptocurrency",
-        cascade="all, delete-orphan"
+        "MarketData", back_populates="cryptocurrency", cascade="all, delete-orphan"
     )
     predictions = relationship(
-        "Prediction",
-        back_populates="cryptocurrency",
-        cascade="all, delete-orphan"
+        "Prediction", back_populates="cryptocurrency", cascade="all, delete-orphan"
     )
 
     # Indexes for performance
-    __table_args__ = (
-        Index("idx_crypto_symbol_active", "symbol", "is_active"),
-    )
+    __table_args__ = (Index("idx_crypto_symbol_active", "symbol", "is_active"),)
 
     def __repr__(self) -> str:
         return f"<Cryptocurrency(id={self.id}, symbol='{self.symbol}', name='{self.name}')>"

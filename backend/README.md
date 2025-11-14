@@ -16,6 +16,7 @@ Production-ready FastAPI backend service for cryptocurrency prediction system wi
 ## Overview
 
 The backend service provides:
+
 - **RESTful API** for cryptocurrency data management
 - **PostgreSQL database** for persistent storage of historical and real-time data
 - **Redis cache** for high-performance data access
@@ -56,71 +57,79 @@ backend/
 ## Database Schema
 
 ### Cryptocurrencies Table
+
 Stores metadata about tracked cryptocurrencies.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER | Primary key |
-| symbol | VARCHAR(10) | Trading symbol (BTC, ETH, etc.) |
-| name | VARCHAR(100) | Full name |
-| coin_gecko_id | VARCHAR(100) | CoinGecko API identifier |
-| is_active | BOOLEAN | Active tracking flag |
-| created_at | TIMESTAMP | Record creation time |
-| updated_at | TIMESTAMP | Last update time |
+| Column        | Type         | Description                     |
+| ------------- | ------------ | ------------------------------- |
+| id            | INTEGER      | Primary key                     |
+| symbol        | VARCHAR(10)  | Trading symbol (BTC, ETH, etc.) |
+| name          | VARCHAR(100) | Full name                       |
+| coin_gecko_id | VARCHAR(100) | CoinGecko API identifier        |
+| is_active     | BOOLEAN      | Active tracking flag            |
+| created_at    | TIMESTAMP    | Record creation time            |
+| updated_at    | TIMESTAMP    | Last update time                |
 
 **Indexes:**
+
 - `idx_crypto_symbol_active` on (symbol, is_active)
 
 ### Market Data Table
+
 Stores OHLCV (Open, High, Low, Close, Volume) time series data.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | BIGINT | Primary key |
-| cryptocurrency_id | INTEGER | FK to cryptocurrencies |
-| timestamp | TIMESTAMP | Data point timestamp (UTC) |
-| open_price | FLOAT | Opening price (USD) |
-| high_price | FLOAT | Highest price (USD) |
-| low_price | FLOAT | Lowest price (USD) |
-| close_price | FLOAT | Closing price (USD) |
-| volume | FLOAT | Trading volume |
-| market_cap | FLOAT | Market capitalization (USD) |
-| data_source | VARCHAR(50) | Data source identifier |
-| created_at | TIMESTAMP | Record creation time |
+| Column            | Type        | Description                 |
+| ----------------- | ----------- | --------------------------- |
+| id                | BIGINT      | Primary key                 |
+| cryptocurrency_id | INTEGER     | FK to cryptocurrencies      |
+| timestamp         | TIMESTAMP   | Data point timestamp (UTC)  |
+| open_price        | FLOAT       | Opening price (USD)         |
+| high_price        | FLOAT       | Highest price (USD)         |
+| low_price         | FLOAT       | Lowest price (USD)          |
+| close_price       | FLOAT       | Closing price (USD)         |
+| volume            | FLOAT       | Trading volume              |
+| market_cap        | FLOAT       | Market capitalization (USD) |
+| data_source       | VARCHAR(50) | Data source identifier      |
+| created_at        | TIMESTAMP   | Record creation time        |
 
 **Indexes:**
+
 - `idx_market_data_crypto_timestamp` (UNIQUE) on (cryptocurrency_id, timestamp)
 - `idx_market_data_timestamp` on (timestamp)
 - `idx_market_data_crypto_created` on (cryptocurrency_id, created_at)
 
 **Constraints:**
+
 - Price fields must be non-negative
 - high_price >= low_price
 
 ### Predictions Table
+
 Stores model predictions and performance metrics.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | BIGINT | Primary key |
-| cryptocurrency_id | INTEGER | FK to cryptocurrencies |
-| prediction_timestamp | TIMESTAMP | When prediction was made |
-| target_timestamp | TIMESTAMP | Future timestamp predicted |
-| predicted_price | FLOAT | Predicted price (USD) |
-| confidence_score | FLOAT | Model confidence (0-1) |
-| model_name | VARCHAR(100) | Model identifier |
-| model_version | VARCHAR(50) | Model version |
-| features_used | JSON | Features used for prediction |
-| actual_price | FLOAT | Actual price (filled later) |
-| error | FLOAT | Prediction error percentage |
-| created_at | TIMESTAMP | Record creation time |
+| Column               | Type         | Description                  |
+| -------------------- | ------------ | ---------------------------- |
+| id                   | BIGINT       | Primary key                  |
+| cryptocurrency_id    | INTEGER      | FK to cryptocurrencies       |
+| prediction_timestamp | TIMESTAMP    | When prediction was made     |
+| target_timestamp     | TIMESTAMP    | Future timestamp predicted   |
+| predicted_price      | FLOAT        | Predicted price (USD)        |
+| confidence_score     | FLOAT        | Model confidence (0-1)       |
+| model_name           | VARCHAR(100) | Model identifier             |
+| model_version        | VARCHAR(50)  | Model version                |
+| features_used        | JSON         | Features used for prediction |
+| actual_price         | FLOAT        | Actual price (filled later)  |
+| error                | FLOAT        | Prediction error percentage  |
+| created_at           | TIMESTAMP    | Record creation time         |
 
 **Indexes:**
+
 - `idx_prediction_crypto_target` on (cryptocurrency_id, target_timestamp)
 - `idx_prediction_crypto_prediction_time` on (cryptocurrency_id, prediction_timestamp)
 - `idx_prediction_model` on (model_name, model_version)
 
 **Constraints:**
+
 - target_timestamp > prediction_timestamp
 - confidence_score between 0 and 1
 
@@ -136,32 +145,38 @@ Stores model predictions and performance metrics.
 ### Option 1: Docker Setup (Recommended)
 
 1. **Clone the repository and navigate to project root:**
+
    ```bash
    cd /path/to/crypto-prediction
    ```
 
 2. **Create environment file:**
+
    ```bash
    cp backend/.env.example backend/.env
    # Edit .env with your configuration
    ```
 
 3. **Start all services:**
+
    ```bash
    docker-compose up -d
    ```
 
 4. **Verify services are running:**
+
    ```bash
    docker-compose ps
    ```
 
 5. **Run database migrations:**
+
    ```bash
    docker-compose exec backend alembic upgrade head
    ```
 
 6. **Seed initial data (optional):**
+
    ```bash
    docker-compose exec backend python scripts/seed_data.py
    ```
@@ -174,6 +189,7 @@ Stores model predictions and performance metrics.
 ### Option 2: Local Development Setup
 
 1. **Create Python virtual environment:**
+
    ```bash
    cd backend
    python -m venv venv
@@ -181,11 +197,13 @@ Stores model predictions and performance metrics.
    ```
 
 2. **Install dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Set up PostgreSQL:**
+
    ```bash
    # Using PostgreSQL CLI
    createdb crypto_prediction_db
@@ -194,23 +212,27 @@ Stores model predictions and performance metrics.
    ```
 
 4. **Set up Redis:**
+
    ```bash
    # Install and start Redis (platform-specific)
    redis-server
    ```
 
 5. **Configure environment:**
+
    ```bash
    cp .env.example .env
    # Edit .env with your local database/redis URLs
    ```
 
 6. **Run migrations:**
+
    ```bash
    alembic upgrade head
    ```
 
 7. **Seed data (optional):**
+
    ```bash
    python scripts/seed_data.py
    ```
@@ -225,21 +247,25 @@ Stores model predictions and performance metrics.
 ### Database Migrations
 
 Create a new migration:
+
 ```bash
 alembic revision --autogenerate -m "Description of changes"
 ```
 
 Apply migrations:
+
 ```bash
 alembic upgrade head
 ```
 
 Rollback migration:
+
 ```bash
 alembic downgrade -1
 ```
 
 View migration history:
+
 ```bash
 alembic history
 ```
@@ -247,11 +273,13 @@ alembic history
 ### Cache Management
 
 The Redis cache is used for:
+
 - **Short TTL (5 min)**: Latest market prices
 - **Medium TTL (30 min)**: Recent predictions
 - **Long TTL (1 hour)**: Cryptocurrency metadata
 
 Clear cache:
+
 ```python
 from app.cache import cache_manager
 cache_manager.flush_all()
@@ -260,16 +288,19 @@ cache_manager.flush_all()
 ### Code Quality
 
 Format code:
+
 ```bash
 black app/ --line-length 100
 ```
 
 Lint code:
+
 ```bash
 flake8 app/
 ```
 
 Type checking:
+
 ```bash
 mypy app/
 ```
@@ -279,9 +310,11 @@ mypy app/
 ### Health Endpoints
 
 #### GET /health
+
 Basic health check.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -292,9 +325,11 @@ Basic health check.
 ```
 
 #### GET /health/db
+
 Database connectivity check.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -305,9 +340,11 @@ Database connectivity check.
 ```
 
 #### GET /health/cache
+
 Redis cache health check.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -321,9 +358,11 @@ Redis cache health check.
 ```
 
 #### GET /health/detailed
+
 Comprehensive health check of all services.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -415,6 +454,7 @@ tests/
 ### CI/CD
 
 Tests run automatically on every push via GitHub Actions:
+
 - Backend tests with PostgreSQL and Redis
 - Code quality checks (Black, Flake8, mypy)
 - Database migration verification
@@ -452,6 +492,7 @@ CORS_ORIGINS=https://yourdomain.com
 ### Docker Deployment
 
 1. **Build production image:**
+
    ```bash
    docker build -t crypto-prediction-backend:latest -f backend/Dockerfile backend/
    ```
@@ -484,11 +525,13 @@ CORS_ORIGINS=https://yourdomain.com
 ### Database Optimization
 
 1. **Connection Pooling:**
+
    - Default pool size: 20
    - Adjust based on concurrent load
    - Monitor connection usage
 
 2. **Indexing:**
+
    - All foreign keys are indexed
    - Composite indexes for common queries
    - Regular VACUUM and ANALYZE
@@ -501,6 +544,7 @@ CORS_ORIGINS=https://yourdomain.com
 ### Cache Strategy
 
 1. **Cache Patterns:**
+
    - Cache-aside for read-heavy operations
    - Write-through for critical data
    - TTL-based expiration
@@ -515,6 +559,7 @@ CORS_ORIGINS=https://yourdomain.com
 ### Common Issues
 
 **Database connection errors:**
+
 ```bash
 # Check PostgreSQL is running
 docker-compose ps postgres
@@ -527,6 +572,7 @@ psql -h localhost -U crypto_user -d crypto_prediction_db
 ```
 
 **Redis connection errors:**
+
 ```bash
 # Check Redis is running
 docker-compose ps redis
@@ -536,6 +582,7 @@ redis-cli ping
 ```
 
 **Migration issues:**
+
 ```bash
 # Check current version
 alembic current
@@ -554,13 +601,3 @@ alembic downgrade <revision>
 3. Ensure all tests pass
 4. Format code with Black
 5. Submit pull request
-
-## License
-
-[Your License Here]
-
-## Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Contact: [your-email@example.com]

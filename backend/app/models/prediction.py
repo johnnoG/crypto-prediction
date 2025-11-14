@@ -13,7 +13,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
-    BigInteger,
     CheckConstraint,
     JSON,
 )
@@ -46,7 +45,7 @@ class Prediction(Base):
 
     __tablename__ = "predictions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     cryptocurrency_id = Column(
         Integer,
         ForeignKey("cryptocurrencies.id", ondelete="CASCADE"),

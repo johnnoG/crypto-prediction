@@ -1,0 +1,324 @@
+﻿Cursor Rules for Crypto Forecast & Real-Time Dashboard
+Purpose
+
+Enforce consistent edits across stack, style, and product decisions.
+
+Treat this file as source of truth for development guidance inside Cursor IDE.
+
+Derived from curated patterns (see https://github.com/PatrickJS/awesome-cursorrules
+).
+
+Project Context
+
+Goal: Forecast crypto prices, show real-time market prices, aggregate crypto news, and provide Coinbase-like UI.
+
+Backend: Python FastAPI service (python backend/app/main.py). Uses httpx, pydantic-settings, APScheduler.
+
+Frontend: React + Vite + TypeScript + Tailwind CSS + shadcn/ui; TanStack Query; React Router.
+
+Data: Real CoinGecko API (no mock/random). Cache all responses. Serve cached data when rate-limited/offline.
+
+Streaming: WebSocket feeds preferred. Fallback: SSE with cached snapshot.
+
+Caching/Storage: Redis cache; PostgreSQL for historical; SQLite fallback in dev.
+
+News: MCP Firecrawl ingestion pipeline with REST fallback. Deduplicate via URL/content hash. Add sentiment + topics.
+
+Forecasting: Baselines → Prophet/ARIMA → LightGBM/XGBoost → optional LSTM/TFT. Always compare against baselines.
+
+Dev OS: Windows PowerShell first. No && chaining; run commands line by line.
+
+Repo Layout: Monorepo with backend/, frontend/, models/, data/, infra/, .github/.
+
+Guardrails
+
+Do use real sources with cache + fallback.
+
+Do keep PRs minimal, lint-clean, reversible.
+
+Do preserve formatting and indentation.
+
+Don’t add Docker-only flows; native setup required.
+
+Don’t add mock paths unless explicitly requested.
+
+Coding Standards
+Backend (Python)
+
+FastAPI + Uvicorn.
+
+HTTP: httpx with retries/backoff. Handle timeouts/429.
+
+Config: pydantic-settings.
+
+Cache: Redis with SWR + TTL. Graceful stale reads.
+
+Structure:
+
+backend/app/api/ → routers
+
+backend/app/services/ → business logic
+
+backend/app/clients/ → API clients
+
+backend/app/models/ → DB models
+
+backend/app/tasks/ → scheduled jobs
+
+Testing: pytest; TestClient/AsyncClient for endpoints.
+
+Style: Ruff + Black + isort. Explicit type hints. Early returns > deep nesting.
+
+Frontend (TypeScript/React)
+
+Stack: Vite + React + TS; Tailwind + shadcn/ui.
+
+State: TanStack Query for server state. Minimal local state with Zustand/Jotai.
+
+Networking: Typed API clients only. No scattered fetch.
+
+Components: Small, composable, pure.
+
+Testing: vitest + @testing-library/react.
+
+Style: ESLint + Prettier. Strict typing; no any.
+
+API & Data Rules
+
+CoinGecko base: https://api.coingecko.com/api/v3.
+
+Cache all raw JSON responses with sensible TTL.
+
+On timeout/429: return cached response, log warning, schedule refresh.
+
+Required endpoints: /prices, /forecasts, /stream, /news, /health, /cache/status.
+
+Forecasts must expose metrics and confidence bands.
+
+Commit & PR Conventions
+
+Conventional Commits (feat:, fix:, docs:, test:, refactor:, ci:).
+
+Diffs scoped and minimal.
+
+Update README task board + decision log when new features added.
+
+Windows PowerShell Rules
+
+Never chain with &&.
+
+Create venv:
+
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+
+Redis: use Windows port or Memurai.
+
+Firecrawl MCP: under infra/mcp/firecrawl/ with Node LTS.
+
+EPIC + SCRUM Breakdown with Acceptance Criteria
+EPIC: Data Foundation (SCRUM-1 → 4)
+
+SCRUM-1: Config + pipeline setup
+
+Implement pydantic-settings config; .env support.
+
+Add Redis cache utility + /cache/status endpoint.
+
+Add structured logging.
+
+Acceptance: Health endpoints OK; Redis read/write works; config loads from .env.
+
+SCRUM-2: PostgreSQL + Redis setup
+
+Postgres schema: assets, ohlcv, features.
+
+Alembic init + base migration.
+
+Indices on (asset_id, ts) and (ts).
+
+Acceptance: alembic upgrade head succeeds; DB + Redis health checks OK.
+
+SCRUM-3: Kaggle ingestion
+
+Add data/ingestion/kaggle_ingest.py with Polars/Pandas.
+
+Dedupe, schema mapping, unit tests for parsers.
+
+Acceptance: 1M+ rows ingested; indices effective; tests green.
+
+SCRUM-4: ETL features
+
+Use Polars/DuckDB for high-volume feature computation.
+
+Features: returns, log returns, RSI, MACD, vol, VWAP.
+
+APScheduler jobs with jitter; retry/backoff.
+
+Acceptance: Feature tables materialized with versioning; backfills run successfully.
+
+EPIC: MCP News (SCRUM-5A → 5G)
+
+SCRUM-5A: Firecrawl MCP bootstrap
+
+Setup infra/mcp/firecrawl/ with README.md, start.ps1, .env.example.
+
+Run sample crawl → data/raw/news/.
+
+Acceptance: MCP server responds; JSON dumps created.
+
+SCRUM-5B: News schema + migrations
+
+Tables: news_sources, news_articles, news_sentiment, news_topics, news_fetch_log.
+
+Indices: unique url_hash, content_hash, published_at.
+
+Acceptance: Migrations apply; duplicate prevention works.
+
+SCRUM-5C: Backend adapter + service
+
+Add adapters/firecrawl_client.py with retries/backoff.
+
+Add services/news_service.py for normalization + dedupe (SHA256 url_hash, content_hash).
+
+API: GET /news, POST /news/refresh (admin).
+
+Cache normalized + raw in Redis.
+
+Acceptance: Endpoints return fresh/cached data; unit tests green.
+
+SCRUM-5D: Source seeding + scheduling
+
+Seed data/sources/news_sources.yaml (CoinDesk, CoinTelegraph, The Block).
+
+APScheduler incremental crawl jobs with jitter.
+
+Acceptance: Jobs run; logs tracked; retries/backoff honored.
+
+SCRUM-5E: Dedup + NLP enrichment
+
+Sentiment: VADER/TextBlob → FinBERT/DistilRoBERTa later.
+
+Topics: zero-shot labels (regulation, exchange, hacks, adoption, markets).
+
+Entities: symbol mapping (BTC, ETH, SOL).
+
+Acceptance: Articles enriched and linked to assets.
+
+SCRUM-5F: Admin + observability
+
+Endpoints: /news/sources, /news/stats.
+
+Logs/metrics.
+
+Acceptance: Ops visibility confirmed; requeue flow works.
+
+SCRUM-5G: MCP validation + fallback
+
+Add timeouts, retries, rate limits, size limit via NEWS_MAX_CONTENT_BYTES.
+
+REST fallback path when MCP unstable.
+
+Acceptance: End-to-end ingest proven; REST fallback works.
+
+EPIC: Modeling & Forecasting (SCRUM-6 → 10)
+
+SCRUM-6/7: Preprocessing + feature engineering
+
+Rolling windows, leakage checks, train/val/test splits.
+
+Acceptance: Splits reproducible; no leakage detected.
+
+SCRUM-8: Baselines
+
+Naive, SMA/EMA, ARIMA/Prophet.
+
+Metrics: MAPE, RMSE, sMAPE.
+
+Acceptance: Metrics computed + reported.
+
+SCRUM-9: Advanced models
+
+LightGBM, XGBoost, optional LSTM/TFT.
+
+Acceptance: Advanced models beat baselines on out-of-sample data.
+
+SCRUM-10: Backtesting
+
+Walk-forward evaluation.
+
+Slippage assumptions.
+
+Artifacted reports.
+
+Acceptance: Reports generated; reproducible with fixed seeds.
+
+EPIC: Backend & APIs (SCRUM-11 → 15)
+
+/prices with Redis cache + SWR fallback.
+
+/forecasts returning model outputs + confidence.
+
+/stream WS/SSE with cached snapshot fallback.
+
+/news queryable.
+
+/health, /cache/status.
+
+Acceptance: Contract tests pass; 429/timeouts return cached data.
+
+EPIC: Frontend UI (SCRUM-16 → 19)
+
+SCRUM-16: Scaffold Vite + React + TS + Tailwind + shadcn/ui.
+
+Acceptance: App builds + runs with placeholder page.
+
+SCRUM-17: Core screens (home ticker, watchlist, asset detail, forecasts).
+
+Acceptance: Screens navigate cleanly; data loads from APIs.
+
+SCRUM-18: Visualizations (charts for prices, vol, sentiment overlays).
+
+Acceptance: Charts render correctly and are responsive.
+
+SCRUM-19: Settings + alerts UI.
+
+Acceptance: User preferences persist; alert rules configurable.
+
+EPIC: Notifications & Alerts (SCRUM-20 → 23)
+
+Triggers: price/volatility thresholds, forecast deviation, sentiment spikes.
+
+Channels: Twilio SMS/Email, Firebase push.
+
+Acceptance: Rules persisted in DB; retries honored; cooldowns enforced.
+
+EPIC: Security, Testing, Optimization (SCRUM-24 → 27)
+
+Security: secrets mgmt, request validation, audit logs.
+
+Testing: unit, integration, contract, load (Locust/k6).
+
+Perf: Redis key design, query optimization, profiling.
+
+Acceptance: Meets SLO (500 rps cached /prices, p95 latency target).
+
+EPIC: Deployment & Monitoring (SCRUM-28 → 31)
+
+CI/CD: GitHub Actions (lint, test, build, migrations, deploy).
+
+Deployment: minimal VM/PaaS; managed Postgres/Redis.
+
+Observability: logs, metrics, traces, dashboards.
+
+Acceptance: Blue/green or canary deploys; alerting on SLO breach.
+
+When Unsure
+
+Default to minimal, reversible edits.
+
+Confirm if change impacts architecture or dependencies.
+
+Always align with EPICs + SCRUMs in this file.w

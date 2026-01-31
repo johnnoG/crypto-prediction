@@ -1,118 +1,83 @@
-"""
-Application Configuration
+from __future__ import annotations
 
-Centralized configuration management using pydantic-settings.
-Loads environment variables and provides typed configuration objects.
-"""
+import json
+from functools import lru_cache
+from typing import List, Optional
 
-from typing import List
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    Main application settings.
+    """Application settings loaded from environment variables.
 
-    Configuration is loaded from environment variables with fallback to .env file.
-    All sensitive data should be provided through environment variables in production.
+    Uses pydantic-settings for robust env parsing with sensible defaults.
     """
 
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Core
+    app_name: str = Field(default="Crypto Forecast & Real‑Time Dashboard API")
+
+    # CORS - Simple string field to avoid parsing issues
+    allowed_origins: str = Field(default="*")
+
+    # External APIs / Data sources
+    coingecko_base_url: str = Field(
+        default="https://api.coingecko.com/api/v3",
+        alias="COINGECKO_BASE_URL",
     )
 
-    # Application Metadata
-    app_name: str = Field(
-        default="Crypto Prediction API", description="Application name"
-    )
-    app_version: str = Field(default="1.0.0", description="Application version")
-    debug: bool = Field(default=False, description="Debug mode flag")
-    log_level: str = Field(default="INFO", description="Logging level")
+    coingecko_api_key: Optional[str] = Field(default=None, alias="COINGECKO_API_KEY")
 
-    # API Configuration
-    api_v1_prefix: str = Field(default="/api/v1", description="API version 1 prefix")
-    cors_origins: List[str] = Field(
-        default=["http://localhost:3000"], description="Allowed CORS origins"
+    # Firecrawl MCP + REST
+    firecrawl_base_url: str = Field(
+        default="https://api.firecrawl.dev",
+        alias="FIRECRAWL_BASE_URL",
     )
+    firecrawl_api_key: Optional[str] = Field(default=None, alias="FIRECRAWL_API_KEY")
+    mcp_firecrawl_port: int = Field(default=7355, alias="MCP_FIRECRAWL_PORT")
+    news_max_content_bytes: int = Field(default=1048576, alias="NEWS_MAX_CONTENT_BYTES")
 
-    # Database Configuration
-    database_url: PostgresDsn = Field(
-        default="postgresql://crypto_user:crypto_pass@localhost:5432/crypto_prediction_db",
-        description="PostgreSQL connection URL",
-    )
-    database_pool_size: int = Field(
-        default=20, ge=1, le=100, description="Database connection pool size"
-    )
-    database_max_overflow: int = Field(
-        default=10,
-        ge=0,
-        le=50,
-        description="Maximum overflow connections beyond pool_size",
-    )
-    database_pool_timeout: int = Field(
-        default=30, ge=5, le=120, description="Connection pool timeout in seconds"
-    )
-    database_pool_recycle: int = Field(
-        default=3600, ge=300, description="Connection recycle time in seconds"
-    )
+    # CryptoPanic API
+    cryptopanic_api_key: Optional[str] = Field(default=None, alias="CRYPTOPANIC_API_KEY")
 
-    # Redis Configuration
-    redis_url: RedisDsn = Field(
-        default="redis://localhost:6379/0", description="Redis connection URL"
-    )
-    redis_max_connections: int = Field(
-        default=50, ge=1, le=200, description="Maximum Redis connections in pool"
-    )
-    redis_socket_timeout: int = Field(
-        default=5, ge=1, le=30, description="Redis socket timeout in seconds"
-    )
-    redis_socket_connect_timeout: int = Field(
-        default=5, ge=1, le=30, description="Redis socket connect timeout in seconds"
-    )
+    # Caching
+    redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
+    cache_sqlite_path: Optional[str] = Field(default=None, alias="CACHE_SQLITE_PATH")
 
-    # Cache TTL Settings (in seconds)
-    cache_ttl_short: int = Field(
-        default=300,
-        ge=60,
-        description="Short cache TTL (5 minutes) for frequently updated data",
-    )
-    cache_ttl_medium: int = Field(
-        default=1800,
-        ge=300,
-        description="Medium cache TTL (30 minutes) for moderately stable data",
-    )
-    cache_ttl_long: int = Field(
-        default=3600,
-        ge=600,
-        description="Long cache TTL (1 hour) for relatively static data",
-    )
+    # Database
+    database_url: Optional[str] = Field(default=None, alias="DATABASE_URL")
+    
+    # Authentication
+    secret_key: str = Field(default="your-secret-key-change-in-production", alias="SECRET_KEY")
+    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    
+    # Google OAuth
+    google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(default="http://127.0.0.1:8000/api/auth/google/callback", alias="GOOGLE_REDIRECT_URI")
 
-    # Security
-    secret_key: str = Field(
-        default="change-this-to-a-secure-random-string-in-production",
-        min_length=32,
-        description="Secret key for signing tokens",
-    )
+    # API rate limiting (slowapi)
+    rate_limit_default: str = Field(default="120/minute", alias="RATE_LIMIT_DEFAULT")
+    rate_limit_prices: str = Field(default="60/minute", alias="RATE_LIMIT_PRICES")
+    rate_limit_market: str = Field(default="45/minute", alias="RATE_LIMIT_PRICES_MARKET")
+    rate_limit_history: str = Field(default="30/minute", alias="RATE_LIMIT_PRICES_HISTORY")
+    rate_limit_forecasts: str = Field(default="20/minute", alias="RATE_LIMIT_FORECASTS")
+    rate_limit_news_list: str = Field(default="30/minute", alias="RATE_LIMIT_NEWS_LIST")
+    rate_limit_news_refresh: str = Field(default="5/minute", alias="RATE_LIMIT_NEWS_REFRESH")
+    rate_limit_cache_status: str = Field(default="30/minute", alias="RATE_LIMIT_CACHE_STATUS")
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: str | List[str]) -> List[str]:
-        """Parse CORS origins from string or list."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
-
-    @property
-    def database_url_str(self) -> str:
-        """Get database URL as string."""
-        return str(self.database_url)
-
-    @property
-    def redis_url_str(self) -> str:
-        """Get Redis URL as string."""
-        return str(self.redis_url)
+    def get_allowed_origins_list(self) -> List[str]:
+        """Get allowed origins as a list."""
+        if not self.allowed_origins or self.allowed_origins == "*":
+            return ["*"]
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
 
-# Global settings instance
-settings = Settings()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]
+
+

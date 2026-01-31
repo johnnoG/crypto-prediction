@@ -1,0 +1,36 @@
+{
+  "kaggle_datasets": {
+    "primary": "sudalairajkumar/cryptocurrencypricehistory",
+    "secondary": "mczielinski/bitcoin-historical-data",
+    "sentiment": "ankurzing/sentiment-analysis-for-financial-news",
+    "fear_greed": "andrewmvd/crypto-fear-and-greed-index"
+  },
+  "apis": {
+    "coingecko": {
+      "enabled": true,
+      "base_url": "https://api.coingecko.com/api/v3",
+      "rate_limit": "50 calls/minute"
+    },
+    "binance": {
+      "enabled": false,
+      "base_url": "https://api.binance.com/api/v3",
+      "rate_limit": "1200 requests/minute"
+    },
+    "cryptocompare": {
+      "enabled": false,
+      "base_url": "https://min-api.cryptocompare.com",
+      "rate_limit": "100,000 calls/month"
+    }
+  },
+  "news_sources": {
+    "firecrawl": {
+      "enabled": true,
+      "base_url": "https://api.firecrawl.dev"
+    },
+    "newsapi": {
+      "enabled": false,
+      "base_url": "https://newsapi.org/v2",
+      "rate_limit": "1000 requests/day"
+    }
+  }
+}

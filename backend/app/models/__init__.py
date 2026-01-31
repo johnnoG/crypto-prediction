@@ -1,11 +1,19 @@
-"""
-Database Models
+from __future__ import annotations
 
-Contains SQLAlchemy ORM models for the application.
-"""
+from .base import Base
+from .market import Asset, OHLCV
+from .news import NewsSource, NewsArticle, NewsSentiment, NewsTopics
+from .user import User
 
-from app.models.cryptocurrency import Cryptocurrency
-from app.models.market_data import MarketData
-from app.models.prediction import Prediction
+__all__ = [
+    "Base",
+    "Asset", 
+    "OHLCV",
+    "NewsSource",
+    "NewsArticle", 
+    "NewsSentiment",
+    "NewsTopics",
+    "User"
+]
 
-__all__ = ["Cryptocurrency", "MarketData", "Prediction"]
+

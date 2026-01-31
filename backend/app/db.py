@@ -20,7 +20,19 @@ def _build_database_url() -> str:
     return "sqlite:///./dev.db"
 
 
-_engine = create_engine(_build_database_url(), echo=False, future=True)
+_engine = create_engine(
+    _build_database_url(),
+    echo=False,
+    future=True,
+    pool_size=20,
+    max_overflow=0,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={
+        "connect_timeout": 10,
+        "application_name": "crypto_prediction_backend"
+    } if "postgresql" in _build_database_url() else {}
+)
 SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False, class_=Session)
 
 
@@ -28,6 +40,9 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 

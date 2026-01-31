@@ -138,7 +138,7 @@ export function getCryptoDisplayName(cryptoId: string): string {
     arbitrum: 'Arbitrum',
   };
   
-  return names[cryptoId] || cryptoId.charAt(0).toUpperCase() + cryptoId.slice(1).replace(/-/g, ' ');
+  return names[cryptoId] || (cryptoId ? cryptoId.charAt(0).toUpperCase() + cryptoId.slice(1).replace(/-/g, ' ') : 'Unknown');
 }
 
 // Helper to get crypto symbol
@@ -177,5 +177,5 @@ export function getCryptoSymbol(cryptoId: string): string {
     arbitrum: 'ARB',
   };
   
-  return symbols[cryptoId] || cryptoId.toUpperCase().replace(/-/g, '');
+  return symbols[cryptoId] || (cryptoId ? cryptoId.toUpperCase().replace(/-/g, '') : 'UNKNOWN');
 }

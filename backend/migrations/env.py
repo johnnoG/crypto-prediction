@@ -28,11 +28,17 @@ try:
     from app.models.base import Base  # type: ignore
     from app.models import market as _market_models  # noqa: F401, type: ignore
     from app.models import news as _news_models  # noqa: F401, type: ignore
+    from app.models import user as _user_models  # noqa: F401, type: ignore
+    from app.models import alert as _alert_models  # noqa: F401, type: ignore
+    from app.models import watchlist as _watchlist_models  # noqa: F401, type: ignore
 except Exception:  # pragma: no cover
     from backend.app.config import get_settings  # type: ignore
     from backend.app.models.base import Base  # type: ignore
     from backend.app.models import market as _market_models  # noqa: F401, type: ignore
     from backend.app.models import news as _news_models  # noqa: F401, type: ignore
+    from backend.app.models import user as _user_models  # noqa: F401, type: ignore
+    from backend.app.models import alert as _alert_models  # noqa: F401, type: ignore
+    from backend.app.models import watchlist as _watchlist_models  # noqa: F401, type: ignore
 
 settings = get_settings()
 db_url = settings.database_url or "sqlite:///dev.db"

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
+import { useToast } from '../hooks/use-toast';
 import { formatPrice, getCryptoDisplayName, getCryptoSymbol } from '../hooks/useCryptoPrices';
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import MiniSparkline from './MiniSparkline';
@@ -176,6 +177,8 @@ const DEFAULT_CRYPTOS = [
 ];
 
 function ForecastPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedModel, setSelectedModel] = useState('baseline');
   const [forecastDays, setForecastDays] = useState(7);
   const [selectedCrypto, setSelectedCrypto] = useState<string | null>(null);
@@ -219,6 +222,102 @@ function ForecastPanel() {
     if (confidence >= 0.8) return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30';
     if (confidence >= 0.6) return 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30';
     return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30';
+  };
+
+  // Handler for adding to watchlist
+  const handleAddToWatchlist = async (e: React.MouseEvent, crypto: any) => {
+    e.stopPropagation();
+
+    try {
+      const watchlistData = {
+        crypto_symbol: getCryptoSymbol(crypto.id),
+        crypto_name: getCryptoDisplayName(crypto.id),
+        crypto_id: crypto.id,
+        notification_enabled: true
+      };
+      console.log('Adding to watchlist:', watchlistData);
+      console.log('Crypto object:', crypto);
+      await apiClient.addToWatchlist(watchlistData);
+
+      // Invalidate watchlist cache to refresh the page
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+
+      toast({
+        title: "Added to Watchlist",
+        description: `${getCryptoDisplayName(crypto.id)} has been added to your watchlist.`,
+      });
+    } catch (error: any) {
+      console.error('Error adding to watchlist:', error);
+      const errorMessage = error?.message || 'Failed to add to watchlist';
+      if (errorMessage.includes('already in your watchlist') || errorMessage.includes('409')) {
+        toast({
+          title: "Already in Watchlist",
+          description: `${getCryptoDisplayName(crypto.id)} is already in your watchlist.`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to add to watchlist. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Handler for setting alert
+  const handleSetAlert = async (e: React.MouseEvent, crypto: any) => {
+    e.stopPropagation();
+
+    console.log('Setting alert for crypto:', crypto);
+
+    // Get current price for the alert - fallback to forecast price if real-time fails
+    const currentPriceData = realTimePrices?.[crypto.id];
+    const realTimePrice = currentPriceData?.usd;
+    const forecastPrice = forecastData?.forecasts?.[crypto.id]?.current_price;
+    const currentPrice = realTimePrice || forecastPrice || 0;
+
+    console.log('Real time price:', realTimePrice);
+    console.log('Forecast price:', forecastPrice);
+    console.log('Using current price:', currentPrice);
+
+    if (!currentPrice) {
+      toast({
+        title: "Error",
+        description: "Unable to get current price. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Set a basic price alert 5% above current price
+      const targetPrice = currentPrice * 1.05;
+
+      await apiClient.createAlert({
+        crypto_symbol: getCryptoSymbol(crypto.id),
+        crypto_name: getCryptoDisplayName(crypto.id),
+        alert_type: 'price_target',
+        target_price: targetPrice,
+        condition: 'above',
+        message: `Alert when ${getCryptoDisplayName(crypto.id)} reaches $${targetPrice.toFixed(2)}`
+      });
+
+      // Invalidate alerts cache to refresh any alerts page
+      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+
+      toast({
+        title: "Alert Set",
+        description: `Price alert set for ${getCryptoDisplayName(crypto.id)} at $${targetPrice.toFixed(2)}`,
+      });
+    } catch (error: any) {
+      console.error('Error setting alert:', error);
+      toast({
+        title: "Error",
+        description: "Failed to set alert. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -747,21 +846,15 @@ function ForecastPanel() {
 
                 {/* Quick Actions */}
                 <div className="flex space-x-2 pt-2">
-                  <button 
+                  <button
                     className="flex-1 px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Add to watchlist functionality
-                    }}
+                    onClick={(e) => handleAddToWatchlist(e, { id: cryptoId })}
                   >
                     + Watchlist
                   </button>
-                  <button 
+                  <button
                     className="flex-1 px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Set alert functionality
-                    }}
+                    onClick={(e) => handleSetAlert(e, { id: cryptoId })}
                   >
                     Set Alert
                   </button>

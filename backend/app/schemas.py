@@ -134,3 +134,85 @@ class MessageResponse(BaseModel):
     """Generic message response."""
     message: str
     detail: Optional[str] = None
+
+
+# Alert Schemas
+class AlertCreate(BaseModel):
+    """Schema for creating a new alert."""
+    crypto_symbol: str = Field(..., min_length=1, max_length=20)
+    crypto_name: str = Field(..., min_length=1, max_length=100)
+    alert_type: str = Field(..., description="Alert type: price_target, forecast_change, volatility")
+    target_price: Optional[float] = Field(None, gt=0, description="Target price for price alerts")
+    condition: Optional[str] = Field(None, description="Condition: above, below, reaches")
+    message: Optional[str] = Field(None, max_length=500)
+    expires_at: Optional[datetime] = None
+
+    @validator('alert_type')
+    def validate_alert_type(cls, v):
+        """Validate alert type."""
+        valid_types = ['price_target', 'forecast_change', 'volatility']
+        if v not in valid_types:
+            raise ValueError(f'Alert type must be one of: {", ".join(valid_types)}')
+        return v
+
+    @validator('condition')
+    def validate_condition(cls, v):
+        """Validate condition."""
+        if v is not None:
+            valid_conditions = ['above', 'below', 'reaches']
+            if v not in valid_conditions:
+                raise ValueError(f'Condition must be one of: {", ".join(valid_conditions)}')
+        return v
+
+
+class AlertResponse(BaseModel):
+    """Schema for alert response."""
+    id: int
+    crypto_symbol: str
+    crypto_name: str
+    alert_type: str
+    target_price: Optional[float]
+    condition: Optional[str]
+    status: str
+    message: Optional[str]
+    is_active: bool
+    created_at: datetime
+    triggered_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# Watchlist Schemas
+class WatchlistCreate(BaseModel):
+    """Schema for adding to watchlist."""
+    crypto_symbol: str = Field(..., min_length=1, max_length=20)
+    crypto_name: str = Field(..., min_length=1, max_length=100)
+    crypto_id: str = Field(..., min_length=1, max_length=50, description="CoinGecko ID")
+    notes: Optional[str] = Field(None, max_length=1000)
+    is_favorite: bool = False
+    notification_enabled: bool = True
+
+
+class WatchlistUpdate(BaseModel):
+    """Schema for updating watchlist item."""
+    notes: Optional[str] = Field(None, max_length=1000)
+    is_favorite: Optional[bool] = None
+    notification_enabled: Optional[bool] = None
+
+
+class WatchlistResponse(BaseModel):
+    """Schema for watchlist response."""
+    id: int
+    crypto_symbol: str
+    crypto_name: str
+    crypto_id: str
+    notes: Optional[str]
+    is_favorite: bool
+    notification_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

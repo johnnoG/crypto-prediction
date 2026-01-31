@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     # Google OAuth
     google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
     google_client_secret: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
-    google_redirect_uri: str = Field(default="http://127.0.0.1:8000/api/auth/google/callback", alias="GOOGLE_REDIRECT_URI")
+    google_redirect_uri: str = Field(default="http://localhost:3000/oauth/callback/google", alias="GOOGLE_REDIRECT_URI")
 
     # API rate limiting (slowapi)
     rate_limit_default: str = Field(default="120/minute", alias="RATE_LIMIT_DEFAULT")
@@ -79,5 +79,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
-
-

@@ -40,20 +40,22 @@ class SmartCacheService:
 
         # Cache TTL settings (in seconds)
         self.ttl_settings = {
-            "prices": 300,      # 5 minutes for prices
-            "market_data": 600, # 10 minutes for market data
+            "prices": 900,      # 15 minutes for prices
+            "market_data": 1200, # 20 minutes for market data
             "news": 1800,       # 30 minutes for news
             "forecasts": 3600,  # 1 hour for forecasts
         }
         
         # Background update intervals (in seconds)
         self.update_intervals = {
-            "prices": 120,      # Try to update every 2 minutes
-            "market_data": 300, # Try to update every 5 minutes
+            "prices": 600,      # Try to update every 10 minutes
+            "market_data": 900, # Try to update every 15 minutes
             "news": 900,        # Try to update every 15 minutes
             "forecasts": 1800,  # Try to update every 30 minutes
         }
         
+        self.background_updates_enabled = os.getenv("SMART_CACHE_BACKGROUND_UPDATES", "false").lower() in ("1", "true", "yes")
+        self._cooldown_until: Optional[datetime] = None
         self._background_tasks: Dict[str, asyncio.Task] = {}
         self._last_update_attempts: Dict[str, datetime] = {}
         self._initialized = False
@@ -78,6 +80,10 @@ class SmartCacheService:
         
         print("[INFO] Smart cache initialized, skipping initial data fetch (will use existing cache)")
         
+        if not self.background_updates_enabled:
+            print("[INFO] Smart cache background updates disabled")
+            return
+
         # Start background update tasks only
         for data_type in self.ttl_settings.keys():
             if data_type not in self._background_tasks:
@@ -167,17 +173,25 @@ class SmartCacheService:
     
     def _should_attempt_update(self, data_type: str) -> bool:
         """Check if we should attempt to update cached data."""
+        if self._cooldown_until and datetime.utcnow() < self._cooldown_until:
+            return False
         if data_type not in self._last_update_attempts:
             return True
         
         last_attempt = self._last_update_attempts[data_type]
         interval = self.update_intervals.get(data_type, 300)
         return datetime.utcnow() - last_attempt > timedelta(seconds=interval)
+
+    def _mark_rate_limited(self, cooldown_seconds: int = 900) -> None:
+        self._cooldown_until = datetime.utcnow() + timedelta(seconds=cooldown_seconds)
+        print(f"[WARNING] CoinGecko rate-limited. Pausing cache refresh until {self._cooldown_until.isoformat()}")
     
     async def _background_update_loop(self, data_type: str):
         """Background loop to keep cached data updated."""
         while True:
             try:
+                if not self.background_updates_enabled:
+                    break
                 if self._should_attempt_update(data_type):
                     await self._update_cached_data(data_type)
                     self._last_update_attempts[data_type] = datetime.utcnow()
@@ -376,10 +390,11 @@ class SmartCacheService:
                     except Exception as chunk_error:
                         message = str(chunk_error).lower()
                         if "429" in message or "too many requests" in message:
+                            self._mark_rate_limited()
                             wait_time = 5 * (attempt + 1)
                             print(f"[RATE LIMIT] Price chunk {chunk} attempt {attempt+1}/3 waiting {wait_time}s")
                             await asyncio.sleep(wait_time)
-                            continue
+                            return results
                         print(f"[ERROR] Rate-limited price fetch failed for {chunk}: {chunk_error}")
                         await asyncio.sleep(1.0)
                         break
@@ -414,10 +429,11 @@ class SmartCacheService:
                     except Exception as chunk_error:
                         message = str(chunk_error).lower()
                         if "429" in message or "too many requests" in message:
+                            self._mark_rate_limited()
                             wait_time = 5 * (attempt + 1)
                             print(f"[RATE LIMIT] Direct price chunk {chunk} attempt {attempt+1}/3 waiting {wait_time}s")
                             await asyncio.sleep(wait_time)
-                            continue
+                            return results
                         print(f"[ERROR] Chunk price fetch failed for {chunk}: {chunk_error}")
                         await asyncio.sleep(1.0)
                         break
@@ -461,10 +477,11 @@ class SmartCacheService:
                     except Exception as chunk_error:
                         message = str(chunk_error).lower()
                         if "429" in message or "too many requests" in message:
+                            self._mark_rate_limited()
                             wait_time = 5 * (attempt + 1)
                             print(f"[RATE LIMIT] Market chunk {chunk} attempt {attempt+1}/3 waiting {wait_time}s")
                             await asyncio.sleep(wait_time)
-                            continue
+                            return results
                         print(f"[ERROR] Rate-limited market data fetch failed for {chunk}: {chunk_error}")
                         await asyncio.sleep(1.0)
                         break
@@ -505,10 +522,11 @@ class SmartCacheService:
                     except Exception as chunk_error:
                         message = str(chunk_error).lower()
                         if "429" in message or "too many requests" in message:
+                            self._mark_rate_limited()
                             wait_time = 5 * (attempt + 1)
                             print(f"[RATE LIMIT] Direct market chunk {chunk} attempt {attempt+1}/3 waiting {wait_time}s")
                             await asyncio.sleep(wait_time)
-                            continue
+                            return results
                         print(f"[ERROR] Chunk market data fetch failed for {chunk}: {chunk_error}")
                         await asyncio.sleep(1.0)
                         break
@@ -562,7 +580,8 @@ class SmartCacheService:
         # If we have stale data, try to update immediately (not just background)
         if cached_data:
             # Try immediate update, but don't block on it
-            asyncio.create_task(self._update_cached_data(data_type))
+            if self.background_updates_enabled:
+                asyncio.create_task(self._update_cached_data(data_type))
             # Return stale data immediately
             return cached_data
         

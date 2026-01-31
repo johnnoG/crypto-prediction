@@ -186,8 +186,8 @@ function ForecastPanel() {
   const { data: forecastData, isLoading, error, refetch } = useQuery<ForecastData>({
     queryKey: ['forecasts', selectedCryptos.join(','), forecastDays, selectedModel],
     queryFn: () => apiClient.getForecasts(selectedCryptos, forecastDays, selectedModel),
-    refetchInterval: 300000, // 5 minutes
-    staleTime: 240000, // 4 minutes
+    refetchInterval: 900000, // 15 minutes
+    staleTime: 900000, // 15 minutes
   });
 
   // Fetch real-time prices for live updates (like the market panel does)
@@ -197,8 +197,8 @@ function ForecastPanel() {
       const response = await apiClient.getMultiplePrices(selectedCryptos);
       return response;
     },
-    refetchInterval: 15000, // Update every 15 seconds for real-time feel
-    staleTime: 10000,
+    refetchInterval: 60000, // Reduce API usage
+    staleTime: 60000,
     enabled: selectedCryptos.length > 0,
   });
 
@@ -283,6 +283,29 @@ function ForecastPanel() {
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No forecast data available</h3>
             <p className="text-gray-600 dark:text-gray-400 mb-4">Please select cryptocurrencies and try again</p>
             <button 
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm transition-colors"
+              onClick={() => refetch()}
+            >
+              Load Forecasts
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (forecastData && (!forecastData.forecasts || Object.keys(forecastData.forecasts).length === 0)) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="market-card">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No forecast data available</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">Please try again in a moment or reduce the selection.</p>
+            <button
               className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm transition-colors"
               onClick={() => refetch()}
             >
@@ -1296,4 +1319,3 @@ function getCryptoIconStyle(cryptoId: string): string {
 }
 
 export default ForecastPanel;
-

@@ -41,25 +41,22 @@ The application will be ready in about 1-2 minutes. You can create an account an
 │   ├── app/
 │   │   ├── main.py           # Application entry point
 │   │   ├── config.py         # Configuration management
-│   │   ├── database.py       # Database connection & ORM
+│   │   ├── db.py             # Database connection & ORM
 │   │   ├── cache.py          # Redis cache manager
 │   │   ├── api/              # API endpoints
-│   │   │   └── health.py     # Health check endpoints
-│   │   └── models/           # SQLAlchemy models
-│   │       ├── cryptocurrency.py
-│   │       ├── market_data.py
-│   │       └── prediction.py
-│   ├── alembic/              # Database migrations
-│   ├── scripts/              # Utility scripts
-│   │   ├── init-db.sql
-│   │   └── seed_data.py
-│   ├── tests/                # Test suite
+│   │   ├── clients/          # External API clients
+│   │   ├── services/         # Forecasting, ETL, caching, health
+│   │   ├── models/           # SQLAlchemy models
+│   │   └── utils/            # Connection pooling, circuit breaker
+│   ├── migrations/           # Database migrations
+│   ├── tests/                # Test suite (subset)
 │   ├── requirements.txt      # Python dependencies
 │   ├── Dockerfile
 │   └── README.md
 │
-├── models/                    # ML training & notebooks
-│   ├── notebooks/            # Jupyter notebooks for exploration
+├── models/                    # ML training, configs, artifacts
+│   ├── artifacts/            # Stored model binaries
+│   ├── configs/              # Model configuration
 │   └── src/                  # Model training code
 │
 ├── frontend/                  # React dashboard
@@ -68,15 +65,16 @@ The application will be ready in about 1-2 minutes. You can create an account an
 │   └── Dockerfile
 │
 ├── data/                      # Data storage
+│   ├── ingestion/            # Ingestion scripts
 │   ├── kaggle-raw/           # Raw datasets
-│   └── processed/            # Processed datasets
-│
-├── infra/                     # Infrastructure as Code
-│   └── ...                   # Terraform/K8s manifests
+│   ├── raw/demo/             # Sample parquet data
+│   └── sources/              # Data source configs and tests
 │
 ├── docs/                      # Documentation
-│   ├── QUICKSTART.md         # Quick start guide
-│   └── DATABASE_SETUP.md     # Database setup guide
+│   └── reference/            # Reference docs and summaries
+│
+├── assets/                    # Binary assets
+├── tests/                     # Root-level tests
 │
 ├── .github/                   # GitHub workflows & templates
 │   └── workflows/
@@ -87,9 +85,9 @@ The application will be ready in about 1-2 minutes. You can create an account an
 
 ## Documentation
 
-- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes
+- [Quick Reference](docs/reference/QUICK_REFERENCE.md) - Getting started and key commands
 - [Backend API Documentation](backend/README.md) - Detailed API documentation
-- [Database Setup Guide](docs/DATABASE_SETUP.md) - PostgreSQL & Redis configuration
+- [Implementation Summary](docs/reference/IMPLEMENTATION_SUMMARY.md) - Architecture and feature overview
 
 ## Technology Stack
 
@@ -150,7 +148,7 @@ The application will be ready in about 1-2 minutes. You can create an account an
 **Real-time Crypto Data:**
 - Live cryptocurrency price feeds from CoinGecko API
 - Intelligent rate limiting and caching to respect API limits
-- Support for 35+ major cryptocurrencies (BTC, ETH, SOL, etc.)
+- Support for 30+ major cryptocurrencies in the UI (BTC, ETH, SOL, etc.)
 - Error handling and graceful degradation
 
 **Frontend Application:**
@@ -159,14 +157,13 @@ The application will be ready in about 1-2 minutes. You can create an account an
 - Real-time crypto price displays and charts
 - Responsive design with modern UI components
 - Integration with backend API using React Query
+- Advanced charting and technical indicators in the UI
 
 ### 🚧 In Progress Features
 
-- [ ] Market data aggregation and forecasting endpoints
-- [ ] ML model integration for price predictions
-- [ ] Advanced charting and technical indicators
-- [ ] WebSocket support for real-time updates
-- [ ] Portfolio tracking and management
+- [ ] ML model integration for price predictions (service + training pipeline present)
+- [ ] WebSocket streaming integrated into UI (backend WS/SSE exists; hook present)
+- [ ] Portfolio tracking and management (backend integration pending)
 
 ### 📋 Planned Features
 

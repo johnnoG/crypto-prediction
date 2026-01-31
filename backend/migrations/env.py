@@ -7,12 +7,9 @@ from sqlalchemy import pool
 
 from alembic import context
 
-# Ensure repo root and backend/ are on sys.path
+# Ensure backend/ is on sys.path (works in container where /app is backend root)
 _here = os.path.dirname(__file__)
-_repo_root = os.path.abspath(os.path.join(_here, "..", ".."))
-_backend_root = os.path.join(_repo_root, "backend")
-if _repo_root not in sys.path:
-    sys.path.append(_repo_root)
+_backend_root = os.path.abspath(os.path.join(_here, ".."))
 if _backend_root not in sys.path:
     sys.path.append(_backend_root)
 

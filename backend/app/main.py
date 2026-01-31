@@ -19,7 +19,7 @@ if str(backend_app_dir) not in sys.path:
 
 try:
     from .config import get_settings, Settings
-    from .api import prices_router, cache_router, db_router, news_router, features_router, crypto_data_router, forecasts_router, stream_router, quick_prices_router
+    from .api import prices_router, cache_router, db_router, news_router, features_router, crypto_data_router, forecasts_router, stream_router, quick_prices_router, market_router
     from .api.auth import router as auth_router
     from .api.rate_limit_monitor import router as rate_limit_router
     from .api.health import router as health_router
@@ -31,7 +31,7 @@ try:
 except ImportError:
     # When running as script, use absolute imports
     from config import get_settings, Settings
-    from api import prices_router, cache_router, db_router, news_router, features_router, crypto_data_router, forecasts_router, stream_router, quick_prices_router
+    from api import prices_router, cache_router, db_router, news_router, features_router, crypto_data_router, forecasts_router, stream_router, quick_prices_router, market_router
     from api.auth import router as auth_router
     from api.rate_limit_monitor import router as rate_limit_router
     from api.health import router as health_router
@@ -236,6 +236,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_router, prefix="/api")  # Admin functions
     app.include_router(quick_prices_router, prefix="/api")  # EMERGENCY: Fast cache-only endpoints
     app.include_router(prices_router, prefix="/api")
+    app.include_router(market_router, prefix="/api")
     app.include_router(cache_router, prefix="/api")
     app.include_router(db_router, prefix="/api")
     app.include_router(news_router, prefix="/api")
@@ -260,5 +261,4 @@ if __name__ == "__main__":
 
     # Note: reload requires an import string. When running as a script, disable reload.
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
-
 

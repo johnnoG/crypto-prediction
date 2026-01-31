@@ -69,8 +69,8 @@ function CoinDetailView({ coinId, currentData, onClose }: CoinDetailViewProps) {
       if (!response.ok) throw new Error('Failed to fetch history');
       return response.json();
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 60 * 1000, // Refetch every minute
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
   });
 
   // Format data for charts
@@ -431,4 +431,3 @@ function CoinDetailView({ coinId, currentData, onClose }: CoinDetailViewProps) {
 }
 
 export default CoinDetailView;
-

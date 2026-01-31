@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -261,7 +261,10 @@ async def oauth_login(provider: str) -> OAuthUrlResponse:
         if not oauth_service.is_configured():
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=f"{provider.title()} OAuth is not configured"
+                detail=(
+                    f"{provider.title()} OAuth is not configured. "
+                    "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI."
+                ),
             )
         
         # Generate state for CSRF protection
@@ -275,12 +278,16 @@ async def oauth_login(provider: str) -> OAuthUrlResponse:
             state=state
         )
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OAuth initialization failed: {str(e)}"
@@ -305,7 +312,10 @@ async def oauth_callback(
         if not oauth_service.is_configured():
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=f"{provider.title()} OAuth is not configured"
+                detail=(
+                    f"{provider.title()} OAuth is not configured. "
+                    "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI."
+                ),
             )
         
         # Exchange code for access token
@@ -349,12 +359,16 @@ async def oauth_callback(
             message=f"Successfully signed in with {provider.title()}!"
         )
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OAuth authentication failed: {str(e)}"

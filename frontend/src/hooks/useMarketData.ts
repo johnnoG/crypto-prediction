@@ -85,8 +85,8 @@ export function useMarketData(cryptoIds: string[] = DEFAULT_CRYPTO_IDS) {
         return {};
       }
     },
-    staleTime: 60 * 1000, // 1 minute
-    refetchInterval: 120 * 1000, // Refetch every 2 minutes to reduce rate limiting
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: 10 * 60 * 1000, // Refetch every 10 minutes to reduce rate limiting
     retry: 2, // Reduced retries since we have cache fallback
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });

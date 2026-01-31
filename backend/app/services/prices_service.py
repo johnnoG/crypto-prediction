@@ -16,8 +16,8 @@ except ImportError:
     from services.smart_cache_service import smart_cache
 
 
-FRESH_TTL_SECONDS = 30
-LAST_SUCCESS_TTL_SECONDS = 3600  # keep for 1 hour unless evicted
+FRESH_TTL_SECONDS = 300
+LAST_SUCCESS_TTL_SECONDS = 14400  # keep for 4 hours unless evicted
 
 
 def _cache_key(ids: str, vs_currencies: str) -> str:
@@ -401,5 +401,3 @@ async def _fetch_fallback_market_data(ids_list: list[str]) -> Optional[Dict[str,
             continue
 
     return market_snapshot or None
-
-

@@ -42,7 +42,8 @@ const OAuthCallback: React.FC<OAuthCallbackProps> = ({ onSuccess, onError }) => 
         
         // Determine provider from URL path
         const pathParts = window.location.pathname.split('/');
-        const provider = pathParts[pathParts.indexOf('callback') - 1] || 'google';
+        const callbackIndex = pathParts.indexOf('callback');
+        const provider = (callbackIndex >= 0 && pathParts[callbackIndex + 1]) || 'google';
         
         // Exchange code for tokens
         const response = await fetch(

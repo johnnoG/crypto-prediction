@@ -37,7 +37,7 @@ class GoogleOAuthService:
         
     def is_configured(self) -> bool:
         """Check if Google OAuth is properly configured."""
-        return bool(self.client_id and self.client_secret)
+        return bool(self.client_id and self.client_secret and self.redirect_uri)
     
     def get_authorization_url(self, state: Optional[str] = None) -> str:
         """Generate Google OAuth authorization URL."""

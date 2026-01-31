@@ -25,6 +25,21 @@ except ImportError:
 
 router = APIRouter(prefix="/forecasts", tags=["forecasts"])
 
+COINGECKO_RATE_LIMITED_UNTIL: Optional[datetime] = None
+COINGECKO_RATE_LIMIT_WINDOW = timedelta(minutes=5)
+
+
+def _mark_coingecko_rate_limited() -> None:
+    global COINGECKO_RATE_LIMITED_UNTIL
+    COINGECKO_RATE_LIMITED_UNTIL = datetime.utcnow() + COINGECKO_RATE_LIMIT_WINDOW
+    print(f"[WARNING] CoinGecko rate-limited. Using cache-only mode until {COINGECKO_RATE_LIMITED_UNTIL.isoformat()}")
+
+
+def _is_coingecko_rate_limited() -> bool:
+    if COINGECKO_RATE_LIMITED_UNTIL is None:
+        return False
+    return datetime.utcnow() < COINGECKO_RATE_LIMITED_UNTIL
+
 COINCAP_ID_MAP = {
     "binancecoin": "binance-coin",
     "ripple": "xrp",
@@ -97,6 +112,10 @@ async def fetch_ohlc_data(coin_id: str, days: int = 90) -> Optional[List[float]]
     
     cache = AsyncCache()
     await cache.initialize()
+
+    if _is_coingecko_rate_limited():
+        print(f"[INFO] Skipping OHLC fetch for {coin_id} due to rate limit window")
+        return None
     
     # Check cache first (cache OHLC data for 1 hour)
     cache_key = f"ohlc:{coin_id}:{days}"
@@ -168,6 +187,8 @@ async def fetch_ohlc_data(coin_id: str, days: int = 90) -> Optional[List[float]]
         return None
     except Exception as e:
         print(f"Error fetching OHLC data for {coin_id}: {e}")
+        if "429" in str(e) or "Too Many Requests" in str(e):
+            _mark_coingecko_rate_limited()
         if client:
             try:
                 await asyncio.wait_for(client.close(), timeout=1.0)
@@ -539,7 +560,11 @@ async def get_forecasts(
             from services.prices_service import get_simple_price_with_cache
         except ImportError:
             from services.prices_service import get_simple_price_with_cache
-        current_prices = await get_simple_price_with_cache(ids=ids, vs_currencies="usd")
+        try:
+            current_prices = await get_simple_price_with_cache(ids=ids, vs_currencies="usd")
+        except HTTPException as price_error:
+            print(f"[WARNING] Price fetch failed: {price_error.detail}")
+            current_prices = {}
         
         ids_list = [id.strip() for id in ids.split(",") if id.strip()]
         forecasts = {}
@@ -551,8 +576,14 @@ async def get_forecasts(
         except ImportError:
             from services.prices_service import get_market_data_with_cache
         
-        market_data = await get_market_data_with_cache(ids=ids, vs_currency="usd")
+        try:
+            market_data = await get_market_data_with_cache(ids=ids, vs_currency="usd")
+        except HTTPException as market_error:
+            print(f"[WARNING] Market data fetch failed: {market_error.detail}")
+            market_data = {}
         
+        skipped_assets: list[str] = []
+        cache_only_mode = _is_coingecko_rate_limited()
         for crypto_id in ids_list:
             try:
                 print(f"[DEBUG] Processing {crypto_id}...")
@@ -567,18 +598,24 @@ async def get_forecasts(
                     print(f"[INFO] Using cached price for {crypto_id}: ${current_price}")
                 else:
                     print(f"[WARNING] No price data for {crypto_id}, skipping...")
+                    skipped_assets.append(crypto_id)
                     continue  # Skip this crypto instead of failing entire request
                 
                 # Fetch real historical OHLC data from CoinGecko with timeout
-                print(f"[DEBUG] Fetching OHLC data for {crypto_id}...")
-                try:
-                    historical_prices = await asyncio.wait_for(
-                        fetch_ohlc_data(crypto_id, days=90),
-                        timeout=15.0  # 15 second timeout per crypto
-                    )
-                except asyncio.TimeoutError:
-                    print(f"[WARNING] Timeout fetching OHLC for {crypto_id}, using synthetic")
+                if cache_only_mode:
                     historical_prices = None
+                else:
+                    print(f"[DEBUG] Fetching OHLC data for {crypto_id}...")
+                    try:
+                        historical_prices = await asyncio.wait_for(
+                            fetch_ohlc_data(crypto_id, days=90),
+                            timeout=15.0  # 15 second timeout per crypto
+                        )
+                    except asyncio.TimeoutError:
+                        print(f"[WARNING] Timeout fetching OHLC for {crypto_id}, using synthetic")
+                        historical_prices = None
+                    if _is_coingecko_rate_limited():
+                        cache_only_mode = True
                 
                 # Use synthetic history as fallback when APIs are rate limited
                 if not historical_prices or len(historical_prices) < 20:
@@ -646,10 +683,19 @@ async def get_forecasts(
         
         # Only return if we have at least one forecast
         if not forecasts:
-            raise HTTPException(
-                status_code=503,
-                detail="Unable to generate forecasts for any of the requested cryptocurrencies. This might be due to API rate limiting or network issues.",
-            )
+            return {
+                "forecasts": {},
+                "metadata": {
+                    "generated_at": base_date.isoformat(),
+                    "model": model,
+                    "forecast_horizon": days,
+                    "total_assets": 0,
+                    "requested_assets": len(ids_list),
+                    "skipped_assets": skipped_assets or ids_list,
+                    "warning": "No forecasts generated. Price data was unavailable for all requested assets.",
+                    "cache_ttl": 3600,
+                },
+            }
         
         result = {
             "forecasts": forecasts,
@@ -752,4 +798,3 @@ async def get_model_performance(request: Request, response: Response) -> Dict[st
         "evaluation_frequency": "monthly",
         "note": "Performance metrics will be updated as models are deployed"
     }
-

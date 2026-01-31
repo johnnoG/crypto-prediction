@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -58,6 +58,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://crypto_user:crypto_pass@postgres:5432/crypto_prediction_db
       - REDIS_URL=redis://redis:6379/0
@@ -71,6 +73,9 @@ services:
     volumes:
       - ./backend:/app
       - ./data:/data
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
     networks:
       - crypto-network
     healthcheck:

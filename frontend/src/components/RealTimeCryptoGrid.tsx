@@ -24,7 +24,7 @@ function RealTimeCryptoGrid({ selectedCrypto, onSelectCrypto }: RealTimeCryptoGr
   const { data: prices, isLoading: pricesLoading, isError: pricesError } = useCryptoPrices(
     TICKER_CRYPTOS,
     ['usd'],
-    { refetchInterval: 15000 } // Same 15 second interval as PriceTicker
+    { refetchInterval: 60000 } // Reduced interval to lower API usage
   );
   
   const { data: marketData, isLoading: marketLoading, isError: marketError } = useMarketData(

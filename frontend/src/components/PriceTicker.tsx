@@ -13,7 +13,7 @@ function PriceTicker() {
   const { data: prices, isLoading: pricesLoading, isError: pricesError } = useCryptoPrices(
     TICKER_CRYPTOS,
     ['usd'],
-    { refetchInterval: 15000 }
+    { refetchInterval: 60000 }
   );
 
   const { data: health, isError: healthError } = useQuery({

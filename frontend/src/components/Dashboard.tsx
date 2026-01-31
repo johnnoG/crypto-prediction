@@ -5,6 +5,7 @@ import MarketsPage from './pages/MarketsPage';
 import ForecastsPage from './pages/ForecastsPage';
 import NewsPage from './pages/NewsPage';
 import PortfolioPage from './pages/PortfolioPage';
+import SettingsPage from './pages/SettingsPage';
 
 function Dashboard() {
   const [currentPage, setCurrentPage] = useState('home');
@@ -25,6 +26,8 @@ function Dashboard() {
         return <NewsPage />;
       case 'portfolio':
         return <PortfolioPage />;
+      case 'settings':
+        return <SettingsPage />;
       default:
         return <HomePage />;
     }

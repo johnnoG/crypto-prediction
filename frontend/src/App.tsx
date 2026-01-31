@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import OAuthCallback from './components/auth/OAuthCallback';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider } from './contexts/AuthContext';
+import { Toaster } from './components/ui/toaster';
 import { useEffect } from 'react';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <AuthProvider>
           <div className="min-h-screen bg-background text-foreground">
             {isOAuthCallback ? <OAuthCallback /> : <Dashboard />}
+            <Toaster />
           </div>
         </AuthProvider>
       </QueryClientProvider>

@@ -46,6 +46,25 @@ class UserUpdate(BaseModel):
     preferences: Optional[str] = None
 
 
+class PasswordChange(BaseModel):
+    """Schema for password change."""
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=256)
+
+    @validator('new_password')
+    def validate_new_password(cls, v):
+        """Validate new password strength."""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
+
 class UserResponse(UserBase):
     """Schema for user response (public data)."""
     id: int

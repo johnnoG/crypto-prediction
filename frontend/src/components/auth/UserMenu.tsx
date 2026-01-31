@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const UserMenu: React.FC = () => {
+interface UserMenuProps {
+  onNavigate?: (page: string) => void;
+}
+
+const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -84,7 +88,10 @@ const UserMenu: React.FC = () => {
           {/* Menu Items */}
           <div className="py-2">
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                onNavigate?.('settings');
+              }}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

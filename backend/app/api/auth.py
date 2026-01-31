@@ -11,7 +11,7 @@ try:
     from auth import AuthService, get_current_user, security
     from db import get_db
     from schemas import (
-        UserCreate, UserLogin, UserResponse, UserUpdate,
+        UserCreate, UserLogin, UserResponse, UserUpdate, PasswordChange,
         AuthResponse, Token, TokenRefresh, MessageResponse,
         OAuthLoginRequest, OAuthCallbackRequest, OAuthUrlResponse
     )
@@ -21,7 +21,7 @@ except ImportError:
     from auth import AuthService, get_current_user, security
     from db import get_db
     from schemas import (
-        UserCreate, UserLogin, UserResponse, UserUpdate,
+        UserCreate, UserLogin, UserResponse, UserUpdate, PasswordChange,
         AuthResponse, Token, TokenRefresh, MessageResponse,
         OAuthLoginRequest, OAuthCallbackRequest, OAuthUrlResponse
     )
@@ -225,11 +225,58 @@ async def update_current_user(
         current_user.last_name = user_update.last_name
     if user_update.preferences is not None:
         current_user.preferences = user_update.preferences
-    
+
     db.commit()
     db.refresh(current_user)
-    
+
     return UserResponse.from_orm(current_user)
+
+
+@router.put("/me/password", response_model=MessageResponse)
+async def change_password(
+    password_change: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> MessageResponse:
+    """Change current user's password."""
+    # Verify current password
+    if not AuthService.verify_password(password_change.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+
+    # Update password
+    current_user.password_hash = AuthService.hash_password(password_change.new_password)
+    db.commit()
+
+    return MessageResponse(
+        message="Password changed successfully",
+        detail="Your password has been updated. Please sign in again with your new password."
+    )
+
+
+@router.delete("/me", response_model=MessageResponse)
+async def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> MessageResponse:
+    """Delete current user's account permanently."""
+    try:
+        # Delete the user from the database
+        db.delete(current_user)
+        db.commit()
+
+        return MessageResponse(
+            message="Account deleted successfully",
+            detail="Your account and all associated data have been permanently deleted."
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete account: {str(e)}"
+        )
 
 
 @router.get("/verify-token")

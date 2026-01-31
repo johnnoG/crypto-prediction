@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const UserMenu: React.FC = () => {
+interface UserMenuProps {
+  onNavigate?: (page: string) => void;
+}
+
+const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -84,7 +88,36 @@ const UserMenu: React.FC = () => {
           {/* Menu Items */}
           <div className="py-2">
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                onNavigate?.('watchlist');
+              }}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+              My Watchlist
+            </button>
+
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onNavigate?.('alerts');
+              }}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zm0-8l-5-5v5h5z" />
+              </svg>
+              My Alerts
+            </button>
+
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onNavigate?.('settings');
+              }}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,27 +125,7 @@ const UserMenu: React.FC = () => {
               </svg>
               Profile Settings
             </button>
-            
-            <button
-              onClick={() => setIsOpen(false)}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zm-5-5h5l-5-5v5z" />
-              </svg>
-              Notifications
-            </button>
-            
-            <button
-              onClick={() => setIsOpen(false)}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-              </svg>
-              Preferences
-            </button>
-            
+
             <div className="border-t border-gray-100 my-2"></div>
             
             <button

@@ -4,16 +4,22 @@ from .base import Base
 from .market import Asset, OHLCV
 from .news import NewsSource, NewsArticle, NewsSentiment, NewsTopics
 from .user import User
+from .alert import UserAlert, AlertType, AlertStatus
+from .watchlist import UserWatchlist
 
 __all__ = [
     "Base",
-    "Asset", 
+    "Asset",
     "OHLCV",
     "NewsSource",
-    "NewsArticle", 
+    "NewsArticle",
     "NewsSentiment",
     "NewsTopics",
-    "User"
+    "User",
+    "UserAlert",
+    "AlertType",
+    "AlertStatus",
+    "UserWatchlist"
 ]
 
 

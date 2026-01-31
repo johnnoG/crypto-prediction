@@ -9,25 +9,37 @@ interface HeaderProps {
   onNavigate?: (page: string) => void;
 }
 
-function Header({ }: HeaderProps) {
+function Header({ currentPage, onNavigate }: HeaderProps) {
   const { isAuthenticated } = useAuth();
   const [showSignIn, setShowSignIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
-  const [activeNav, setActiveNav] = useState<string | null>(null);
-  
-  // Smooth scroll to section
-  const scrollToSection = (sectionId: string) => {
-    setActiveNav(sectionId);
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Handle navigation - use onNavigate if provided, otherwise scroll to section
+  const handleNavigation = (pageId: string) => {
+    if (onNavigate) {
+      onNavigate(pageId);
+    } else {
+      const element = document.getElementById(pageId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
   
   const navItems = [
-    { 
-      id: 'markets', 
-      label: 'Markets', 
+    {
+      id: 'home',
+      label: 'Dashboard',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5v4m8-4v4" />
+        </svg>
+      )
+    },
+    {
+      id: 'markets',
+      label: 'Markets',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -52,12 +64,12 @@ function Header({ }: HeaderProps) {
         </svg>
       )
     },
-    { 
-      id: 'features', 
-      label: 'Features', 
+    {
+      id: 'watchlist',
+      label: 'Watchlist',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
         </svg>
       )
     },
@@ -75,8 +87,8 @@ function Header({ }: HeaderProps) {
         <div className="flex items-center justify-between h-16">
           {/* Logo and Brand */}
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            <button
+              onClick={() => handleNavigation('home')}
               className="group relative"
             >
               {/* Logo glow effect */}
@@ -89,8 +101,8 @@ function Header({ }: HeaderProps) {
             </button>
             
             <div className="hidden sm:block">
-              <button 
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              <button
+                onClick={() => handleNavigation('home')}
                 className="text-xl font-bold text-white hover:text-blue-400 transition-colors"
               >
                 CryptoForecast
@@ -105,10 +117,10 @@ function Header({ }: HeaderProps) {
               {navItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => scrollToSection(item.id)}
+                  onClick={() => handleNavigation(item.id)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    activeNav === item.id 
-                      ? 'bg-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10' 
+                    currentPage === item.id
+                      ? 'bg-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -141,7 +153,7 @@ function Header({ }: HeaderProps) {
             {/* Auth Buttons */}
             <div className="flex items-center gap-2">
               {isAuthenticated ? (
-                <UserMenu />
+                <UserMenu onNavigate={onNavigate} />
               ) : (
                 <>
                   <button 

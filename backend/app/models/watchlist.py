@@ -16,7 +16,7 @@ class UserWatchlist(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # Foreign key to user
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
 
     # Crypto details
     crypto_symbol: Mapped[str] = mapped_column(String(20), nullable=False)

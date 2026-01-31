@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { queryClient } from '../lib/queryClient';
 
 // Types
 export interface User {
@@ -105,12 +106,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
+  useEffect(() => {
+    const handleLogout = () => {
+      clearAuthData();
+      setError(null);
+    };
+
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
+  }, []);
+
   // Helper function to clear auth data
   const clearAuthData = () => {
     localStorage.removeItem('auth_tokens');
     localStorage.removeItem('auth_user');
     setTokens(null);
     setUser(null);
+    queryClient.clear();
   };
 
   // Helper function to store auth data

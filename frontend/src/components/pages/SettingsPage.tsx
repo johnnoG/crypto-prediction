@@ -160,6 +160,7 @@ const SettingsPage: React.FC = () => {
       // Log the user out and close the dialog
       logout();
       setShowDeleteDialog(false);
+      window.location.href = '/';
     } catch {
       toast({
         title: "Deletion Failed",

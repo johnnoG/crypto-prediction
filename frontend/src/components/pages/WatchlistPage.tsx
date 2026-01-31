@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
 import { useToast } from '../../hooks/use-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ConfirmationDialog } from '../ui/confirmation-dialog';
@@ -22,6 +23,7 @@ interface WatchlistItem {
 
 const WatchlistPage: React.FC = () => {
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<WatchlistItem | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -35,6 +37,7 @@ const WatchlistPage: React.FC = () => {
       return result;
     },
     refetchInterval: 300000, // 5 minutes
+    enabled: isAuthenticated,
   });
 
   // Fetch current prices for watchlist items
@@ -46,8 +49,21 @@ const WatchlistPage: React.FC = () => {
       return apiClient.getMultiplePrices(watchlistSymbols);
     },
     refetchInterval: 60000, // 1 minute
-    enabled: watchlistSymbols.length > 0,
+    enabled: isAuthenticated && watchlistSymbols.length > 0,
   });
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="bg-gray-900 border-gray-800 p-6 text-center">
+            <h2 className="text-xl font-semibold text-white mb-2">Sign in required</h2>
+            <p className="text-gray-400">Please sign in to view your watchlist.</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const handleRemoveItem = (item: WatchlistItem) => {
     setItemToRemove(item);

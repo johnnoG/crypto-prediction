@@ -1,0 +1,69 @@
+# FastAPI Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+pydantic-settings==2.6.1
+
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# Redis
+redis==5.2.1
+
+# Data Validation & Serialization
+python-multipart==0.0.20
+email-validator==2.2.0
+
+# File operations & utilities
+aiofiles==24.1.0
+python-jose[cryptography]==3.3.0
+passlib[argon2]==1.7.4
+argon2-cffi==23.1.0
+python-dotenv==1.0.0
+requests==2.32.3
+httpx==0.28.1
+
+# Monitoring & Logging
+python-json-logger==3.2.1
+
+# Rate Limiting
+slowapi==0.1.9
+
+# Data Processing & Parsing
+feedparser==6.0.11
+polars==1.14.0
+
+# Data Science & Machine Learning
+numpy>=1.26.0
+pandas>=2.1.0
+statsmodels>=0.14.0
+
+# Job Scheduling
+APScheduler>=3.10.4
+
+# Web Scraping
+beautifulsoup4>=4.12.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Error Tracking
+sentry-sdk[fastapi,sqlalchemy]>=1.38.0
+
+# Metrics & Monitoring
+prometheus-client>=0.19.0
+
+# OAuth & Authentication
+authlib>=1.2.1
+
+# Development & Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+black==24.10.0
+flake8==7.1.1
+mypy==1.14.0
+fakeredis==2.26.2
+coverage==7.6.9

@@ -20,8 +20,9 @@ except ImportError:
     from config import get_settings
 
 
-# Security configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Security configuration - Using Argon2 for modern password hashing
+# Argon2 is the winner of the Password Hashing Competition and handles long passwords properly
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 security = HTTPBearer()
 settings = get_settings()
 
@@ -37,12 +38,19 @@ class AuthService:
     
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a plain password against its hash."""
+        """Verify a plain password against its hash.
+
+        Uses Argon2 which handles passwords of any reasonable length.
+        """
         return pwd_context.verify(plain_password, hashed_password)
-    
+
     @staticmethod
     def get_password_hash(password: str) -> str:
-        """Generate password hash."""
+        """Generate password hash using Argon2.
+
+        Argon2 is the modern standard for password hashing and properly
+        handles passwords from password managers without length limitations.
+        """
         return pwd_context.hash(password)
     
     @staticmethod

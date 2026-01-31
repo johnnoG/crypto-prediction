@@ -12,8 +12,8 @@ from .base import Base
 
 class User(Base):
     """User model for authentication and user management.
-    
-    Uses secure password hashing with bcrypt and includes all necessary
+
+    Uses secure password hashing with Argon2 and includes all necessary
     fields for a crypto trading platform user.
     """
     

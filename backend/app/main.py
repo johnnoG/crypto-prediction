@@ -229,21 +229,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "timestamp": str(datetime.utcnow())
             }
 
-    # Routers
-    app.include_router(auth_router)  # Auth routes first
-    app.include_router(health_router)  # Health monitoring
-    app.include_router(metrics_router)  # Prometheus metrics
-    app.include_router(admin_router)  # Admin functions
-    app.include_router(quick_prices_router)  # EMERGENCY: Fast cache-only endpoints
-    app.include_router(prices_router)
-    app.include_router(cache_router)
-    app.include_router(db_router)
-    app.include_router(news_router)
-    app.include_router(features_router)
-    app.include_router(crypto_data_router)
-    app.include_router(forecasts_router)
-    app.include_router(stream_router)
-    app.include_router(rate_limit_router)
+    # Routers - Adding /api prefix to match frontend expectations
+    app.include_router(auth_router, prefix="/api")  # Auth routes first
+    app.include_router(health_router)  # Health monitoring (no prefix for system routes)
+    app.include_router(metrics_router)  # Prometheus metrics (no prefix for system routes)
+    app.include_router(admin_router, prefix="/api")  # Admin functions
+    app.include_router(quick_prices_router, prefix="/api")  # EMERGENCY: Fast cache-only endpoints
+    app.include_router(prices_router, prefix="/api")
+    app.include_router(cache_router, prefix="/api")
+    app.include_router(db_router, prefix="/api")
+    app.include_router(news_router, prefix="/api")
+    app.include_router(features_router, prefix="/api")
+    app.include_router(crypto_data_router, prefix="/api")
+    app.include_router(forecasts_router, prefix="/api")
+    app.include_router(stream_router, prefix="/api")
+    app.include_router(rate_limit_router, prefix="/api")
 
     # Note: Startup/shutdown now handled by lifespan context manager above
     # This provides better cleanup and prevents connection leaks

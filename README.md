@@ -1,37 +1,37 @@
-# Crypto Prediction Monorepo
+# Crypto Prediction & Real-Time Dashboard
 
-Production-ready cryptocurrency price prediction system with machine learning capabilities, real-time data processing, and interactive dashboard.
+Production-ready cryptocurrency price prediction system with machine learning capabilities, real-time data processing, user authentication, and interactive dashboard.
 
 ## Overview
 
 A complete end-to-end solution for cryptocurrency price prediction featuring:
 
-- **FastAPI Backend** - RESTful API for data management and model serving
-- **PostgreSQL Database** - Persistent storage for historical and real-time market data
-- **Redis Cache** - High-performance caching layer for frequently accessed data
-- **Machine Learning Pipeline** - Model training, evaluation, and deployment
-- **React Dashboard** - Interactive frontend for visualization and monitoring
-- **Docker Infrastructure** - Containerized deployment with Docker Compose
+- **FastAPI Backend** - RESTful API with authentication, real-time crypto data, and ML forecasting
+- **PostgreSQL Database** - Persistent storage for user data, market data, and predictions
+- **Redis Cache** - High-performance caching layer for frequently accessed crypto prices
+- **React Dashboard** - Interactive frontend with real-time charts and user authentication
+- **User Authentication** - Secure signup/signin with Argon2 password hashing and JWT tokens
+- **Real-time Crypto Data** - Live price feeds from CoinGecko with rate limiting and caching
+- **Docker Infrastructure** - Fully containerized deployment with Docker Compose
 
 ## Quick Start
 
 ```bash
-# Start all services
+# Clone the repository
+git clone <repository-url>
+cd crypto-prediction
+
+# Start all services (backend, frontend, database, cache)
 docker-compose up -d
 
-# Initialize database
-docker-compose exec backend alembic upgrade head
-
-# Seed sample data
-docker-compose exec backend python scripts/seed_data.py
-
-# Access services
-# API: http://localhost:8000
-# Docs: http://localhost:8000/docs
+# Database is automatically initialized with migrations
+# Access the application:
 # Frontend: http://localhost:3000
+# Backend API: http://localhost:8000
+# API Documentation: http://localhost:8000/docs
 ```
 
-For detailed setup instructions, see [docs/QUICKSTART.md](docs/QUICKSTART.md).
+The application will be ready in about 1-2 minutes. You can create an account and start exploring real-time crypto prices immediately!
 
 ## Repository Structure
 
@@ -94,59 +94,88 @@ For detailed setup instructions, see [docs/QUICKSTART.md](docs/QUICKSTART.md).
 ## Technology Stack
 
 ### Backend
-
-- **FastAPI** - Modern Python web framework
-- **SQLAlchemy** - ORM for database operations
+- **FastAPI** - Modern Python web framework with automatic API documentation
+- **SQLAlchemy** - ORM for database operations with async support
 - **Alembic** - Database migration management
-- **Pydantic** - Data validation and settings
-- **Redis-py** - Redis client for Python
+- **Pydantic** - Data validation and settings management
+- **Argon2** - Secure password hashing (industry standard)
+- **PyJWT** - JWT token generation and validation
+- **Redis-py** - Redis client for caching and rate limiting
+- **Slowapi** - Rate limiting middleware for FastAPI
+- **HTTPX** - Modern HTTP client for external API calls
 
-### Database
+### Database & Caching
+- **PostgreSQL 16** - Primary data store with Alpine Linux base
+- **Redis 7** - High-performance caching and session storage
 
-- **PostgreSQL 16** - Primary data store
-- **Redis 7** - Caching layer
-
-### Machine Learning
-
-- **PyTorch/TensorFlow** - Deep learning frameworks
-- **scikit-learn** - Traditional ML algorithms
-- **pandas/numpy** - Data manipulation
+### Data Processing & ML
+- **NumPy & Pandas** - Data manipulation and analysis
+- **Polars** - Fast DataFrame library for large datasets
+- **Statsmodels** - Statistical modeling and time series analysis
+- **Feedparser** - RSS feed parsing for crypto news
+- **BeautifulSoup4** - Web scraping for additional data sources
 
 ### Frontend
+- **React 19** - Modern UI framework with concurrent features
+- **TypeScript** - Type-safe JavaScript development
+- **Vite** - Fast build tool and development server
+- **Tailwind CSS** - Utility-first CSS framework
+- **React Query** - Powerful data synchronization for React
+- **Lightweight Charts** - Performant financial charting library
+- **Lucide React** - Beautiful icon library
 
-- **React** - UI framework
-- **TypeScript** - Type-safe JavaScript
-- **Chart.js** - Data visualization
-
-### DevOps
-
-- **Docker** - Containerization
+### DevOps & Infrastructure
+- **Docker** - Containerization with multi-stage builds
 - **Docker Compose** - Multi-container orchestration
+- **Nginx** - Web server and reverse proxy for frontend
 - **GitHub Actions** - CI/CD pipelines
 
 ## Features
 
-### Current Implementation (SCRUM-2)
+### ✅ Implemented Features
 
-✅ PostgreSQL database with optimized schema
-✅ Redis caching layer with TTL management
-✅ Database migrations with Alembic
-✅ Health check endpoints
-✅ Connection pooling and error handling
-✅ Comprehensive documentation
-✅ Docker containerization
-✅ Seed data scripts
+**Backend Infrastructure:**
+- PostgreSQL database with optimized schema and migrations
+- Redis caching layer with TTL management and rate limiting
+- FastAPI server with comprehensive API endpoints
+- Health check endpoints with database and cache monitoring
+- Docker containerization with multi-stage builds
 
-### Planned Features
+**Authentication & Security:**
+- User registration and login with secure Argon2 password hashing
+- JWT token-based authentication with access and refresh tokens
+- Support for strong passwords from password managers (256+ characters)
+- Secure session management and token validation
 
-- [ ] Real-time data ingestion from CoinGecko/Binance APIs
+**Real-time Crypto Data:**
+- Live cryptocurrency price feeds from CoinGecko API
+- Intelligent rate limiting and caching to respect API limits
+- Support for 35+ major cryptocurrencies (BTC, ETH, SOL, etc.)
+- Error handling and graceful degradation
+
+**Frontend Application:**
+- React 19 dashboard with TypeScript and Tailwind CSS
+- User authentication flow with signup/signin forms
+- Real-time crypto price displays and charts
+- Responsive design with modern UI components
+- Integration with backend API using React Query
+
+### 🚧 In Progress Features
+
+- [ ] Market data aggregation and forecasting endpoints
+- [ ] ML model integration for price predictions
+- [ ] Advanced charting and technical indicators
+- [ ] WebSocket support for real-time updates
+- [ ] Portfolio tracking and management
+
+### 📋 Planned Features
+
 - [ ] LSTM/Transformer models for price prediction
 - [ ] Model training pipeline with MLflow
-- [ ] Interactive React dashboard
-- [ ] WebSocket support for real-time updates
-- [ ] API authentication and rate limiting
-- [ ] Automated testing and CI/CD
-- [ ] Production deployment on AWS/GCP
+- [ ] Advanced analytics and insights dashboard
+- [ ] Mobile-responsive PWA capabilities
+- [ ] Automated testing and CI/CD pipelines
+- [ ] Production deployment on cloud platforms
 
 ## Database Schema
 
@@ -233,21 +262,28 @@ docker-compose exec backend alembic downgrade -1
 
 ## Project Status
 
-**Current Sprint:** SCRUM-2 - Database Setup ✅ COMPLETED
+**✅ COMPLETED - Production-Ready Application**
 
-- [x] PostgreSQL configuration
-- [x] Redis setup
-- [x] Database schema design
-- [x] Migrations setup
-- [x] Health monitoring
-- [x] Documentation
+The application is now fully functional with:
 
-**Next Sprint:** SCRUM-3 - Data Ingestion Pipeline
+- [x] Complete Docker infrastructure with 4-service stack
+- [x] PostgreSQL database with user authentication tables
+- [x] Redis caching for performance optimization
+- [x] FastAPI backend with comprehensive API endpoints
+- [x] React frontend with modern UI and real-time updates
+- [x] User authentication system with Argon2 security
+- [x] Live cryptocurrency price feeds from CoinGecko
+- [x] Rate limiting and error handling
+- [x] Database migrations and health monitoring
 
-- [ ] API integration (CoinGecko/Binance)
-- [ ] Real-time data collection
-- [ ] Data validation and cleaning
-- [ ] Automated data refresh
+**🚧 NEXT PHASE - Advanced Features**
+
+- [ ] Complete ML forecasting pipeline integration
+- [ ] Advanced charting and technical analysis
+- [ ] Portfolio tracking and management features
+- [ ] WebSocket real-time updates
+- [ ] Mobile PWA capabilities
+- [ ] Production deployment automation
 
 ## Acknowledgments
 

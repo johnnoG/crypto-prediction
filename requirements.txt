@@ -56,5 +56,8 @@ psutil>=5.9.0             # System monitoring
 # Data Processing
 pyarrow>=14.0.0           # Parquet support for data caching
 matplotlib>=3.8.0         # Plotting for backtests
+plotly>=5.16.0            # Interactive visualizations
 seaborn>=0.13.0           # Statistical visualizations
+nbformat>=4.2.0          # Jupyter notebook format support
 
+openpyxl>=3.1.0            # Excel file support

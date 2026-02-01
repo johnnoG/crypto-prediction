@@ -25,8 +25,8 @@ class SimpleFeatureEngineer:
     """
 
     def __init__(self, data_path: str = None):
-        self.data_path = data_path or "/Users/yonatanglanzman/src/crypto-prediction/data/processed"
-        self.output_path = "/Users/yonatanglanzman/src/crypto-prediction/data/features"
+        self.data_path = data_path or "crypto-prediction/data/processed"
+        self.output_path = "crypto-prediction/data/features"
 
         # Create output directory
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
@@ -496,7 +496,7 @@ def main():
     print("=" * 70)
 
     # Load processed data
-    data_path = "/Users/yonatanglanzman/src/crypto-prediction/data/processed"
+    data_path = "crypto-prediction/data/processed"
 
     # Load all cryptocurrency data
     crypto_data = {}

@@ -35,9 +35,9 @@ class CryptoDataAnalyzer:
     """
 
     def __init__(self, data_path: str = None):
-        self.data_path = data_path or "/Users/yonatanglanzman/src/crypto-prediction/data/kaggle-extracted"
-        self.output_path = "/Users/yonatanglanzman/src/crypto-prediction/data/processed"
-        self.analysis_path = "/Users/yonatanglanzman/src/crypto-prediction/data_analysis"
+        self.data_path = data_path or "crypto-prediction/data/kaggle-extracted"
+        self.output_path = "crypto-prediction/data/processed"
+        self.analysis_path = "crypto-prediction/data_analysis"
 
         # Create output directories
         Path(self.output_path).mkdir(parents=True, exist_ok=True)

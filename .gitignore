@@ -72,3 +72,7 @@ htmlcov/
 .coverage.*
 .pytest_cache/
 .claude
+
+# data
+data/kaggle-extracted
+data/processed/

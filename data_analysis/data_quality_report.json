@@ -1,0 +1,2791 @@
+{
+  "summary": {
+    "HBAR": {
+      "total_records": 2276,
+      "date_range": "2019-09-20 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2324,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "IOTA": {
+      "total_records": 3105,
+      "date_range": "2017-06-13 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3153,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SAND": {
+      "total_records": 1941,
+      "date_range": "2020-08-20 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1989,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "MX": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CRV": {
+      "total_records": 1947,
+      "date_range": "2020-08-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1995,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SUN": {
+      "total_records": 1308,
+      "date_range": "2022-05-15 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1356,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BCH": {
+      "total_records": 3056,
+      "date_range": "2017-08-01 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3104,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BTT": {
+      "total_records": 1425,
+      "date_range": "2022-01-18 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1473,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BTC": {
+      "total_records": 5628,
+      "date_range": "2010-07-17 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 5676,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CHZ": {
+      "total_records": 2289,
+      "date_range": "2019-09-04 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2340,
+      "missing_days": 52,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TRX": {
+      "total_records": 2986,
+      "date_range": "2017-10-10 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3034,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BAT": {
+      "total_records": 3115,
+      "date_range": "2017-06-01 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3165,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SYRUP": {
+      "total_records": 1034,
+      "date_range": "2022-05-15 00:00:00 to 2025-04-30 00:00:00",
+      "days_coverage": 1081,
+      "missing_days": 48,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "HNT": {
+      "total_records": 2079,
+      "date_range": "2020-04-02 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2129,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "RUNE": {
+      "total_records": 2187,
+      "date_range": "2019-12-18 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2235,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XRP": {
+      "total_records": 3976,
+      "date_range": "2015-01-21 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 4027,
+      "missing_days": 52,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "FTT": {
+      "total_records": 2317,
+      "date_range": "2019-08-07 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2368,
+      "missing_days": 52,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "NEAR": {
+      "total_records": 1885,
+      "date_range": "2020-10-15 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1933,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "GRT": {
+      "total_records": 1821,
+      "date_range": "2020-12-18 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1869,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "VET": {
+      "total_records": 2688,
+      "date_range": "2018-08-04 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2736,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ZEN": {
+      "total_records": 3112,
+      "date_range": "2017-06-06 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3160,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "QNT": {
+      "total_records": 2503,
+      "date_range": "2019-02-05 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2551,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "STX": {
+      "total_records": 3112,
+      "date_range": "2015-05-13 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3915,
+      "missing_days": 804,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XAUT": {
+      "total_records": 1307,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "FLOW": {
+      "total_records": 1780,
+      "date_range": "2021-01-28 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1828,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "PAXG": {
+      "total_records": 1374,
+      "date_range": "2022-03-08 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1424,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ATOM": {
+      "total_records": 2418,
+      "date_range": "2019-05-01 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2466,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TWT": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "FIL": {
+      "total_records": 2851,
+      "date_range": "2018-02-12 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2909,
+      "missing_days": 59,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ICP": {
+      "total_records": 1678,
+      "date_range": "2021-05-10 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1726,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ETC": {
+      "total_records": 3426,
+      "date_range": "2016-07-27 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3474,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "COMP": {
+      "total_records": 2003,
+      "date_range": "2020-06-19 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2051,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BSV": {
+      "total_records": 2581,
+      "date_range": "2018-11-19 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2629,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "GNO": {
+      "total_records": 1444,
+      "date_range": "2021-12-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1492,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "MANA": {
+      "total_records": 2068,
+      "date_range": "2020-04-15 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2116,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "AXS": {
+      "total_records": 1865,
+      "date_range": "2020-11-04 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1913,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "LPT": {
+      "total_records": 2536,
+      "date_range": "2019-01-03 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2584,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "RAY": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "KCS": {
+      "total_records": 2922,
+      "date_range": "2017-12-13 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2970,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TFUEL": {
+      "total_records": 2453,
+      "date_range": "2019-03-27 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2501,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "IMX": {
+      "total_records": 1480,
+      "date_range": "2021-11-24 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1528,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DYDX": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "AAVE": {
+      "total_records": 1890,
+      "date_range": "2020-10-10 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1938,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XMR": {
+      "total_records": 3971,
+      "date_range": "2015-01-29 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 4019,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "AMP": {
+      "total_records": 1880,
+      "date_range": "2020-10-20 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1928,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CVX": {
+      "total_records": 1416,
+      "date_range": "2022-01-27 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1464,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XCN": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XLM": {
+      "total_records": 3252,
+      "date_range": "2017-01-17 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3300,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SUPER": {
+      "total_records": 1300,
+      "date_range": "2022-05-23 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1348,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "NFT": {
+      "total_records": 1437,
+      "date_range": "2022-01-06 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1485,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "NEO": {
+      "total_records": 3052,
+      "date_range": "2017-08-05 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3100,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "USDD": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "LEO": {
+      "total_records": 2369,
+      "date_range": "2019-06-19 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2417,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ALGO": {
+      "total_records": 2357,
+      "date_range": "2019-07-01 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2405,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "AVAX": {
+      "total_records": 1907,
+      "date_range": "2020-09-22 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1956,
+      "missing_days": 50,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ENS": {
+      "total_records": 1306,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 52,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "USDT": {
+      "total_records": 3205,
+      "date_range": "2017-03-05 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3253,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "USDC": {
+      "total_records": 2556,
+      "date_range": "2018-12-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2604,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "THETA": {
+      "total_records": 2874,
+      "date_range": "2018-01-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2922,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SKR": {
+      "total_records": 2073,
+      "date_range": "2020-04-10 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2121,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XTZ": {
+      "total_records": 2718,
+      "date_range": "2018-07-05 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2766,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "LDO": {
+      "total_records": 1314,
+      "date_range": "2022-05-09 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1362,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "POL": {
+      "total_records": 2321,
+      "date_range": "2019-04-30 00:00:00 to 2025-11-11 00:00:00",
+      "days_coverage": 2387,
+      "missing_days": 67,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "GLM": {
+      "total_records": 1310,
+      "date_range": "2022-05-13 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1358,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "INJ": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XVG": {
+      "total_records": 1305,
+      "date_range": "2022-05-18 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1353,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "GT": {
+      "total_records": 1310,
+      "date_range": "2022-05-11 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1360,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "FET": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "JST": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "1INCH": {
+      "total_records": 1800,
+      "date_range": "2021-01-08 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1848,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ETH": {
+      "total_records": 3781,
+      "date_range": "2015-08-07 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3829,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "QTUM": {
+      "total_records": 2940,
+      "date_range": "2017-11-25 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2988,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "WEMIX": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TEL": {
+      "total_records": 2880,
+      "date_range": "2018-01-24 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2928,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ZEC": {
+      "total_records": 3333,
+      "date_range": "2016-10-28 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3381,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "AR": {
+      "total_records": 2006,
+      "date_range": "2020-06-16 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2054,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CAKE": {
+      "total_records": 1900,
+      "date_range": "2020-09-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1948,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TRAC": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "UNI": {
+      "total_records": 1913,
+      "date_range": "2020-09-17 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1961,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "EGLD": {
+      "total_records": 1927,
+      "date_range": "2020-09-03 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1975,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DASH": {
+      "total_records": 4257,
+      "date_range": "2014-04-18 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 4305,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "RSR": {
+      "total_records": 1299,
+      "date_range": "2022-05-24 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1347,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XEC": {
+      "total_records": 1535,
+      "date_range": "2021-09-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1583,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SNX": {
+      "total_records": 1410,
+      "date_range": "2022-02-02 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1458,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DCR": {
+      "total_records": 3752,
+      "date_range": "2015-09-05 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3800,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CFX": {
+      "total_records": 1309,
+      "date_range": "2022-05-14 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1357,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SHIB": {
+      "total_records": 1635,
+      "date_range": "2021-06-22 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1683,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "CRO": {
+      "total_records": 2464,
+      "date_range": "2019-03-16 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2512,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "APE": {
+      "total_records": 1367,
+      "date_range": "2022-03-17 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1415,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "NEXO": {
+      "total_records": 2762,
+      "date_range": "2018-05-22 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2810,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DOT": {
+      "total_records": 1937,
+      "date_range": "2020-08-21 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1988,
+      "missing_days": 52,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DAI": {
+      "total_records": 2100,
+      "date_range": "2017-12-27 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2956,
+      "missing_days": 857,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ADA": {
+      "total_records": 2905,
+      "date_range": "2017-12-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2953,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "XDC": {
+      "total_records": 1920,
+      "date_range": "2020-04-02 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2129,
+      "missing_days": 210,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "LINK": {
+      "total_records": 2996,
+      "date_range": "2017-09-28 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3046,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "BNB": {
+      "total_records": 3018,
+      "date_range": "2017-09-08 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3066,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "GALA": {
+      "total_records": 1535,
+      "date_range": "2021-09-30 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1583,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "ROSE": {
+      "total_records": 1837,
+      "date_range": "2020-12-02 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 1885,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "TUSD": {
+      "total_records": 2564,
+      "date_range": "2018-12-06 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2612,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "LTC": {
+      "total_records": 4431,
+      "date_range": "2013-10-24 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 4481,
+      "missing_days": 51,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "SOL": {
+      "total_records": 2073,
+      "date_range": "2020-04-10 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2121,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "OKB": {
+      "total_records": 2767,
+      "date_range": "2018-05-11 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 2821,
+      "missing_days": 55,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    },
+    "DOGE": {
+      "total_records": 3452,
+      "date_range": "2016-07-01 00:00:00 to 2026-01-30 00:00:00",
+      "days_coverage": 3500,
+      "missing_days": 49,
+      "columns": [
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close"
+      ]
+    }
+  },
+  "missing_data": {
+    "HBAR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "IOTA": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SAND": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "MX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CRV": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SUN": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BCH": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BTT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BTC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CHZ": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TRX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BAT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SYRUP": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "HNT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "RUNE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XRP": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "FTT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "NEAR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "GRT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "VET": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ZEN": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "QNT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "STX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XAUT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "FLOW": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "PAXG": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ATOM": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TWT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "FIL": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ICP": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ETC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "COMP": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BSV": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "GNO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "MANA": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "AXS": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "LPT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "RAY": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "KCS": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TFUEL": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "IMX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DYDX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "AAVE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XMR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "AMP": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CVX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XCN": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XLM": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SUPER": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "NFT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "NEO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "USDD": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "LEO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ALGO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "AVAX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ENS": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "USDT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "USDC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "THETA": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SKR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XTZ": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "LDO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "POL": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "GLM": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "INJ": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XVG": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "GT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "FET": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "JST": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "1INCH": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ETH": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "QTUM": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "WEMIX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TEL": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ZEC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "AR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CAKE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TRAC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "UNI": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "EGLD": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DASH": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "RSR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XEC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SNX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DCR": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CFX": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SHIB": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "CRO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "APE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "NEXO": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DOT": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DAI": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ADA": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "XDC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "LINK": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "BNB": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "GALA": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "ROSE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "TUSD": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "LTC": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "SOL": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "OKB": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    },
+    "DOGE": {
+      "ticker": 0,
+      "open": 0,
+      "high": 0,
+      "low": 0,
+      "close": 0
+    }
+  },
+  "date_ranges": {},
+  "price_anomalies": {
+    "HBAR": {
+      "min_price": 0.01008,
+      "max_price": 0.5218,
+      "price_range_ratio": 51.76587301587302,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "IOTA": {
+      "min_price": 0.0781062,
+      "max_price": 5.32,
+      "price_range_ratio": 68.11239056566572,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SAND": {
+      "min_price": 0.03084,
+      "max_price": 7.7099,
+      "price_range_ratio": 249.99675745784697,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "MX": {
+      "min_price": 0.794679,
+      "max_price": 5.75425,
+      "price_range_ratio": 7.240974028507107,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CRV": {
+      "min_price": 0.207139,
+      "max_price": 12.21,
+      "price_range_ratio": 58.94592519998649,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SUN": {
+      "min_price": 0.00486006,
+      "max_price": 0.0366858,
+      "price_range_ratio": 7.548425328082368,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BCH": {
+      "min_price": 77.41,
+      "max_price": 3715.91,
+      "price_range_ratio": 48.00297119235241,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BTT": {
+      "min_price": 3.67178e-07,
+      "max_price": 3.80076e-06,
+      "price_range_ratio": 10.351273769125601,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BTC": {
+      "min_price": 0.04951,
+      "max_price": 125173.0,
+      "price_range_ratio": 2528236.719854575,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CHZ": {
+      "min_price": 0.004101,
+      "max_price": 0.7664,
+      "price_range_ratio": 186.88124847598147,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TRX": {
+      "min_price": 0.0018,
+      "max_price": 0.3664,
+      "price_range_ratio": 203.55555555555557,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BAT": {
+      "min_price": 0.07168,
+      "max_price": 1.769,
+      "price_range_ratio": 24.679129464285715,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SYRUP": {
+      "min_price": 2.75579,
+      "max_price": 31.2556,
+      "price_range_ratio": 11.341793097442112,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "HNT": {
+      "min_price": 0.0241,
+      "max_price": 52.7,
+      "price_range_ratio": 2186.721991701245,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "RUNE": {
+      "min_price": 0.04453,
+      "max_price": 20.34,
+      "price_range_ratio": 456.77071637098584,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XRP": {
+      "min_price": 0.003565,
+      "max_price": 3.6,
+      "price_range_ratio": 1009.8176718092567,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "FTT": {
+      "min_price": 0.378146,
+      "max_price": 77.21,
+      "price_range_ratio": 204.18039593173006,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "NEAR": {
+      "min_price": 0.5336,
+      "max_price": 20.095,
+      "price_range_ratio": 37.65929535232384,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "GRT": {
+      "min_price": 0.0329614,
+      "max_price": 2.354,
+      "price_range_ratio": 71.41686942908979,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "VET": {
+      "min_price": 0.002225,
+      "max_price": 0.2609,
+      "price_range_ratio": 117.25842696629215,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ZEN": {
+      "min_price": 1.0,
+      "max_price": 151.76,
+      "price_range_ratio": 151.76,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "QNT": {
+      "min_price": 1.48,
+      "max_price": 384.23,
+      "price_range_ratio": 259.6148648648649,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "STX": {
+      "min_price": 0.000133,
+      "max_price": 3.65485,
+      "price_range_ratio": 27480.075187969924,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XAUT": {
+      "min_price": 1630.7,
+      "max_price": 5433.816,
+      "price_range_ratio": 3.332198442386705,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "FLOW": {
+      "min_price": 0.0553835,
+      "max_price": 39.03,
+      "price_range_ratio": 704.7225256619752,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "PAXG": {
+      "min_price": 1609.0,
+      "max_price": 5451.946,
+      "price_range_ratio": 3.3884064636420135,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ATOM": {
+      "min_price": 1.636,
+      "max_price": 43.64,
+      "price_range_ratio": 26.674816625916872,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TWT": {
+      "min_price": 0.581202,
+      "max_price": 2.67604,
+      "price_range_ratio": 4.604320012663411,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "FIL": {
+      "min_price": 1.17159,
+      "max_price": 190.87,
+      "price_range_ratio": 162.91535434751066,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ICP": {
+      "min_price": 2.79764,
+      "max_price": 426.98,
+      "price_range_ratio": 152.62149526029083,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ETC": {
+      "min_price": 0.7435,
+      "max_price": 146.79,
+      "price_range_ratio": 197.43106926698047,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "COMP": {
+      "min_price": 21.99358,
+      "max_price": 861.92,
+      "price_range_ratio": 39.1896180612706,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BSV": {
+      "min_price": 16.97271,
+      "max_price": 440.85,
+      "price_range_ratio": 25.97404892913389,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "GNO": {
+      "min_price": 79.6909,
+      "max_price": 548.91,
+      "price_range_ratio": 6.887988465433318,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "MANA": {
+      "min_price": 0.02711,
+      "max_price": 5.352,
+      "price_range_ratio": 197.41792696421987,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "AXS": {
+      "min_price": 0.1345,
+      "max_price": 160.49,
+      "price_range_ratio": 1193.2342007434945,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "LPT": {
+      "min_price": 0.4969,
+      "max_price": 74.66,
+      "price_range_ratio": 150.2515596699537,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "RAY": {
+      "min_price": 0.137937,
+      "max_price": 7.66277,
+      "price_range_ratio": 55.55267984659663,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "KCS": {
+      "min_price": 0.3464,
+      "max_price": 27.2784,
+      "price_range_ratio": 78.74826789838338,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TFUEL": {
+      "min_price": 0.001117,
+      "max_price": 0.59,
+      "price_range_ratio": 528.2005371530886,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "IMX": {
+      "min_price": 0.20815,
+      "max_price": 9.185,
+      "price_range_ratio": 44.1268316118184,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DYDX": {
+      "min_price": 0.148422,
+      "max_price": 4.43843,
+      "price_range_ratio": 29.90412472544502,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "AAVE": {
+      "min_price": 27.72,
+      "max_price": 630.07,
+      "price_range_ratio": 22.729797979797983,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XMR": {
+      "min_price": 0.099,
+      "max_price": 721.8822,
+      "price_range_ratio": 7291.739393939393,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "AMP": {
+      "min_price": 0.00142247,
+      "max_price": 0.1089,
+      "price_range_ratio": 76.55697483953968,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CVX": {
+      "min_price": 1.46586,
+      "max_price": 36.9811,
+      "price_range_ratio": 25.22826190768559,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XCN": {
+      "min_price": 0.000701803,
+      "max_price": 0.18261,
+      "price_range_ratio": 260.2012245601686,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XLM": {
+      "min_price": 0.001402,
+      "max_price": 0.8848,
+      "price_range_ratio": 631.0984308131241,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SUPER": {
+      "min_price": 0.0711277,
+      "max_price": 2.09927,
+      "price_range_ratio": 29.514099289025236,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "NFT": {
+      "min_price": 3.0256e-07,
+      "max_price": 3.16158e-06,
+      "price_range_ratio": 10.449431517715494,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "NEO": {
+      "min_price": 3.33399,
+      "max_price": 188.61,
+      "price_range_ratio": 56.57185534449714,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "USDD": {
+      "min_price": 0.95266,
+      "max_price": 1.02391,
+      "price_range_ratio": 1.0747905863581972,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "LEO": {
+      "min_price": 0.8102,
+      "max_price": 10.05599,
+      "price_range_ratio": 12.411737842508021,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ALGO": {
+      "min_price": 0.0882817,
+      "max_price": 2.309,
+      "price_range_ratio": 26.1549109271797,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "AVAX": {
+      "min_price": 2.9,
+      "max_price": 134.96,
+      "price_range_ratio": 46.53793103448276,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ENS": {
+      "min_price": 6.73833,
+      "max_price": 42.8177,
+      "price_range_ratio": 6.354348926217623,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "USDT": {
+      "min_price": 0.904,
+      "max_price": 1.12,
+      "price_range_ratio": 1.2389380530973453,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "USDC": {
+      "min_price": 0.956205,
+      "max_price": 1.06,
+      "price_range_ratio": 1.1085488990331571,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "THETA": {
+      "min_price": 0.04128,
+      "max_price": 13.91,
+      "price_range_ratio": 336.9670542635659,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SKR": {
+      "min_price": 0.5183,
+      "max_price": 258.63,
+      "price_range_ratio": 498.99672004630526,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XTZ": {
+      "min_price": 0.3566,
+      "max_price": 8.36,
+      "price_range_ratio": 23.44363432417274,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "LDO": {
+      "min_price": 0.433293,
+      "max_price": 3.81495,
+      "price_range_ratio": 8.804550269678948,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "POL": {
+      "min_price": 0.003148,
+      "max_price": 2.86243,
+      "price_range_ratio": 909.2852604828462,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "GLM": {
+      "min_price": 0.158949,
+      "max_price": 0.725726,
+      "price_range_ratio": 4.565778960547093,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "INJ": {
+      "min_price": 1.17283,
+      "max_price": 51.1131,
+      "price_range_ratio": 43.58099639333919,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XVG": {
+      "min_price": 0.0014138,
+      "max_price": 0.0197987,
+      "price_range_ratio": 14.003890224925732,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "GT": {
+      "min_price": 3.01031,
+      "max_price": 24.7476,
+      "price_range_ratio": 8.220947344293444,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "FET": {
+      "min_price": 0.0547337,
+      "max_price": 3.30389,
+      "price_range_ratio": 60.36299391416988,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "JST": {
+      "min_price": 0.0196714,
+      "max_price": 0.0545836,
+      "price_range_ratio": 2.7747694622650143,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "1INCH": {
+      "min_price": 0.113164,
+      "max_price": 7.492,
+      "price_range_ratio": 66.20480011311018,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ETH": {
+      "min_price": 0.42,
+      "max_price": 4851.54,
+      "price_range_ratio": 11551.285714285714,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "QTUM": {
+      "min_price": 1.017,
+      "max_price": 73.32,
+      "price_range_ratio": 72.09439528023599,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "WEMIX": {
+      "min_price": 0.176012,
+      "max_price": 4.56962,
+      "price_range_ratio": 25.9619798650092,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TEL": {
+      "min_price": 7.8e-05,
+      "max_price": 0.06,
+      "price_range_ratio": 769.2307692307692,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ZEC": {
+      "min_price": 18.1315,
+      "max_price": 5000.0,
+      "price_range_ratio": 275.76317458566587,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "AR": {
+      "min_price": 1.282,
+      "max_price": 85.71,
+      "price_range_ratio": 66.85647425897035,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CAKE": {
+      "min_price": 0.2227,
+      "max_price": 42.71,
+      "price_range_ratio": 191.78266726537942,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TRAC": {
+      "min_price": 0.0512964,
+      "max_price": 2.36793,
+      "price_range_ratio": 46.1617189510375,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "UNI": {
+      "min_price": 1.946,
+      "max_price": 43.11,
+      "price_range_ratio": 22.153134635149023,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "EGLD": {
+      "min_price": 5.21134,
+      "max_price": 490.94,
+      "price_range_ratio": 94.20609670449443,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DASH": {
+      "min_price": 0.65,
+      "max_price": 1433.41,
+      "price_range_ratio": 2205.246153846154,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "RSR": {
+      "min_price": 0.00168018,
+      "max_price": 0.0231212,
+      "price_range_ratio": 13.76114463926484,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XEC": {
+      "min_price": 9.67837e-06,
+      "max_price": 0.000252,
+      "price_range_ratio": 26.037442255255794,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SNX": {
+      "min_price": 0.388933,
+      "max_price": 7.79034,
+      "price_range_ratio": 20.03003087935454,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DCR": {
+      "min_price": 0.007351,
+      "max_price": 238.02,
+      "price_range_ratio": 32379.268126785475,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CFX": {
+      "min_price": 0.0218891,
+      "max_price": 0.511169,
+      "price_range_ratio": 23.352673248329076,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SHIB": {
+      "min_price": 6e-06,
+      "max_price": 7.9e-05,
+      "price_range_ratio": 13.166666666666666,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "CRO": {
+      "min_price": 0.02602,
+      "max_price": 0.895,
+      "price_range_ratio": 34.396617986164486,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "APE": {
+      "min_price": 0.165601,
+      "max_price": 25.8923,
+      "price_range_ratio": 156.3535244352389,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "NEXO": {
+      "min_price": 0.04689,
+      "max_price": 4.012,
+      "price_range_ratio": 85.56195350821069,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DOT": {
+      "min_price": 1.6918,
+      "max_price": 53.89,
+      "price_range_ratio": 31.853647003191867,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DAI": {
+      "min_price": 0.934961,
+      "max_price": 1.042,
+      "price_range_ratio": 1.1144849892134538,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ADA": {
+      "min_price": 0.02375,
+      "max_price": 3.013,
+      "price_range_ratio": 126.86315789473683,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "XDC": {
+      "min_price": 0.000615,
+      "max_price": 0.1823,
+      "price_range_ratio": 296.4227642276423,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "LINK": {
+      "min_price": 0.1468,
+      "max_price": 50.3,
+      "price_range_ratio": 342.6430517711171,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "BNB": {
+      "min_price": 0.6882,
+      "max_price": 1311.307,
+      "price_range_ratio": 1905.4155768671897,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "GALA": {
+      "min_price": 0.00338027,
+      "max_price": 0.72325,
+      "price_range_ratio": 213.96219828593573,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "ROSE": {
+      "min_price": 0.010108,
+      "max_price": 0.56721,
+      "price_range_ratio": 56.114958448753455,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "TUSD": {
+      "min_price": 0.95847,
+      "max_price": 1.04,
+      "price_range_ratio": 1.0850626519348545,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "LTC": {
+      "min_price": 1.12,
+      "max_price": 372.25,
+      "price_range_ratio": 332.3660714285714,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "SOL": {
+      "min_price": 0.5183,
+      "max_price": 258.63,
+      "price_range_ratio": 498.99672004630526,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "OKB": {
+      "min_price": 0.5837,
+      "max_price": 226.1956,
+      "price_range_ratio": 387.5203015247559,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    },
+    "DOGE": {
+      "min_price": 0.00015,
+      "max_price": 0.6784,
+      "price_range_ratio": 4522.666666666667,
+      "zero_prices": "0",
+      "negative_prices": "0"
+    }
+  },
+  "volume_analysis": {}
+}

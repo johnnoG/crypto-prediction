@@ -30,6 +30,7 @@ venv/
 env/
 ENV/
 .venv
+ml_env/
 
 # IDEs
 .vscode/
@@ -74,5 +75,4 @@ htmlcov/
 .claude
 
 # data
-data/kaggle-extracted
-data/processed/
+data/

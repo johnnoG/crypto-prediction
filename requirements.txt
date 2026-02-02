@@ -101,3 +101,22 @@ wheel>=0.41.0             # Package building
 # Memory and Performance
 memory-profiler>=0.61.0   # Memory usage profiling
 psutil>=5.9.0             # System and process utilities (already included above)
+
+# Phase 3: Advanced MLflow Integration & Training Pipeline Dependencies
+# Advanced Documentation
+markdown>=3.5.0           # Markdown processing for documentation
+jinja2>=3.1.0             # Template engine for documentation
+Pillow>=10.0.0            # Image processing for documentation
+
+# Enhanced Visualization
+plotly>=5.17.0            # Interactive visualizations (updated version)
+kaleido>=0.2.1            # Static image export for Plotly
+
+# Statistical Analysis for A/B Testing
+bayesian-testing>=0.2.0   # Bayesian A/B testing (if available)
+
+# Email and Notifications
+sendgrid>=6.10.0          # Email notifications (optional)
+
+# Professional Formatting
+tabulate>=0.9.0           # Table formatting

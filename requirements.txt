@@ -61,3 +61,43 @@ seaborn>=0.13.0           # Statistical visualizations
 nbformat>=4.2.0          # Jupyter notebook format support
 
 openpyxl>=3.1.0            # Excel file support
+
+# MLflow and Hyperparameter Optimization (Phase 2)
+mlflow>=2.8.0              # Experiment tracking and model registry
+optuna>=3.4.0              # Bayesian hyperparameter optimization (already included above)
+
+# Dashboard and Visualization Dependencies for Phase 2
+dash>=2.14.0               # Interactive web dashboards
+dash-bootstrap-components>=1.5.0  # Bootstrap components for Dash
+networkx>=3.2              # Graph visualization for model architectures
+schedule>=1.2.0            # Job scheduling for production pipeline
+
+# Additional ML Model Dependencies
+torch>=2.1.0               # PyTorch for neural networks (optional)
+torchvision>=0.16.0        # PyTorch vision utilities (optional)
+transformers>=4.35.0       # Hugging Face transformers (optional)
+
+# Scientific Computing and Linear Algebra
+scipy>=1.11.0              # Scientific computing
+numba>=0.58.0             # JIT compilation for performance
+
+# Time Series and Financial Analysis
+arch>=6.2.0              # GARCH models and volatility
+cvxpy>=1.4.0              # Convex optimization
+
+# Model Training and Utilities
+tqdm>=4.66.0              # Progress bars
+pyyaml>=6.0               # YAML configuration files
+cloudpickle>=3.0.0        # Extended pickle capabilities
+
+# OpenMP support for LightGBM (may fix loading issues)
+cmake>=3.18.0             # Build tools for LightGBM
+wheel>=0.41.0             # Package building
+
+# Note: For macOS, you may need to install libomp separately:
+# brew install libomp
+# Or try: pip install lightgbm --install-option=--mpi
+
+# Memory and Performance
+memory-profiler>=0.61.0   # Memory usage profiling
+psutil>=5.9.0             # System and process utilities (already included above)

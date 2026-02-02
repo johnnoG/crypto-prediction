@@ -1,0 +1,20 @@
+{
+  "analysis_timestamp": "2026-02-01T19:02:06.225296",
+  "dataset_summary": {
+    "total_cryptocurrencies": 104,
+    "total_features": 155,
+    "date_range": {
+      "start": "2010-07-17T00:00:00",
+      "end": "2026-01-30T00:00:00"
+    }
+  },
+  "files_generated": [
+    "descriptive_statistics_summary.xlsx",
+    "correlation_matrices.xlsx",
+    "risk_metrics.csv",
+    "cluster_assignments.csv",
+    "pca_loadings.csv",
+    "pca_summary.json",
+    "Various visualization PNG files"
+  ]
+}

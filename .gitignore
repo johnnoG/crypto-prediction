@@ -30,6 +30,7 @@ venv/
 env/
 ENV/
 .venv
+ml_env/
 
 # IDEs
 .vscode/
@@ -72,3 +73,9 @@ htmlcov/
 .coverage.*
 .pytest_cache/
 .claude
+
+# data
+data/
+
+# analysis results
+ANALYSIS_DOCUMENTATION.md

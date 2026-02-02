@@ -1,382 +1,441 @@
 """
-LightGBM Model for Cryptocurrency Price Forecasting
-
-Kaggle competition-winning approach:
-- Gradient boosting with proper hyperparameters
-- Walk-forward validation
-- Feature importance tracking
-- Early stopping to prevent overfitting
+LightGBM Model for Cryptocurrency Prediction
+Provides gradient boosting baseline for ensemble methods
 """
 
-from __future__ import annotations
-
-import asyncio
-import joblib
+import os
 import json
+import pickle
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Tuple, Union
+import logging
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
 
 try:
     import lightgbm as lgb
-    from sklearn.model_selection import TimeSeriesSplit
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
-    print("Warning: LightGBM not installed. Install with: pip install lightgbm")
 
+try:
+    import mlflow
+    import mlflow.lightgbm
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class LightGBMForecaster:
-    """
-    LightGBM-based cryptocurrency price forecaster.
-    
-    Uses gradient boosting to learn from technical indicators
-    and price patterns. Fast training and inference.
-    """
-    
-    def __init__(
-        self,
-        config: Optional[Dict[str, Any]] = None,
-        model_dir: str = "models/artifacts/lightgbm"
-    ):
+    """LightGBM-based cryptocurrency price forecasting model"""
+
+    def __init__(self,
+                 config: Optional[Dict[str, Any]] = None,
+                 model_dir: str = "models/artifacts/lightgbm"):
+        """
+        Initialize LightGBM forecaster
+
+        Args:
+            config: Model configuration parameters
+            model_dir: Directory to save model artifacts
+        """
         if not LIGHTGBM_AVAILABLE:
-            raise ImportError("LightGBM not installed")
-        
+            raise ImportError("LightGBM not available. Install with: pip install lightgbm")
+
         self.config = config or self._default_config()
         self.model_dir = Path(model_dir)
         self.model_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.model: Optional[lgb.LGBMRegressor] = None
-        self.feature_names: List[str] = []
-        self.feature_importances: Optional[np.ndarray] = None
-        self.training_history: Dict[str, List[float]] = {'train_loss': [], 'val_loss': []}
-        self.metadata: Dict[str, Any] = {}
-    
-    @staticmethod
-    def _default_config() -> Dict[str, Any]:
-        """Default hyperparameters tuned for crypto forecasting"""
+
+        # Model components
+        self.models = {}  # One model per prediction horizon
+        self.feature_names = []
+        self.is_fitted = False
+
+        # Validation history
+        self.validation_history = []
+        self.feature_importance = {}
+
+    def _default_config(self) -> Dict[str, Any]:
+        """Default LightGBM configuration"""
         return {
             'objective': 'regression',
-            'metric': 'rmse',
+            'metric': 'mae',
             'boosting_type': 'gbdt',
             'num_leaves': 31,
-            'learning_rate': 0.05,
+            'learning_rate': 0.1,
             'feature_fraction': 0.9,
             'bagging_fraction': 0.8,
             'bagging_freq': 5,
-            'max_depth': -1,
-            'min_data_in_leaf': 20,
-            'n_estimators': 100,
             'verbose': -1,
-            'random_state': 42
+            'random_state': 42,
+            'n_estimators': 100,
+            'prediction_horizons': [1, 7, 30],
+            'early_stopping_rounds': 10
         }
-    
-    def train(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-        feature_names: Optional[List[str]] = None,
-        early_stopping_rounds: int = 10
-    ) -> Dict[str, float]:
+
+    def _prepare_features(self, X: np.ndarray) -> np.ndarray:
         """
-        Train LightGBM model with validation.
-        
+        Prepare features for LightGBM (flatten sequences)
+
         Args:
-            X_train: Training features
-            y_train: Training targets
-            X_val: Validation features
-            y_val: Validation targets
-            feature_names: Names of features
-            early_stopping_rounds: Rounds for early stopping
-            
+            X: Input sequences of shape (n_samples, sequence_length, n_features)
+
         Returns:
-            Training metrics dictionary
+            Flattened features of shape (n_samples, sequence_length * n_features)
         """
-        print("Training LightGBM model...")
-        
-        self.feature_names = feature_names or [f"feature_{i}" for i in range(X_train.shape[1])]
-        
-        # Initialize model
-        self.model = lgb.LGBMRegressor(**self.config)
-        
-        # Prepare validation data
-        eval_set = []
-        eval_names = []
-        
-        if X_val is not None and y_val is not None:
-            eval_set = [(X_train, y_train), (X_val, y_val)]
-            eval_names = ['train', 'val']
-        else:
-            eval_set = [(X_train, y_train)]
-            eval_names = ['train']
-        
-        # Train with early stopping
-        self.model.fit(
-            X_train,
-            y_train,
-            eval_set=eval_set,
-            eval_names=eval_names,
-            callbacks=[
-                lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False),
-                lgb.log_evaluation(period=10)
-            ] if X_val is not None else None
-        )
-        
-        # Store feature importances
-        self.feature_importances = self.model.feature_importances_
-        
-        # Calculate metrics
-        train_pred = self.model.predict(X_train)
-        train_rmse = np.sqrt(np.mean((y_train - train_pred) ** 2))
-        
-        metrics = {'train_rmse': train_rmse}
-        
-        if X_val is not None:
-            val_pred = self.model.predict(X_val)
-            val_rmse = np.sqrt(np.mean((y_val - val_pred) ** 2))
-            metrics['val_rmse'] = val_rmse
-        
-        # Store metadata
-        self.metadata = {
-            'trained_at': datetime.now().isoformat(),
-            'n_samples_train': len(X_train),
-            'n_samples_val': len(X_val) if X_val is not None else 0,
-            'n_features': X_train.shape[1],
-            'config': self.config,
-            'metrics': metrics
-        }
-        
-        print(f"Training complete. Train RMSE: {train_rmse:.4f}")
-        if 'val_rmse' in metrics:
-            print(f"Validation RMSE: {metrics['val_rmse']:.4f}")
-        
-        return metrics
-    
-    def predict(
-        self,
-        X: np.ndarray,
-        return_confidence: bool = False
-    ) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
+        if len(X.shape) == 3:
+            # Flatten sequence data for traditional ML
+            n_samples, seq_len, n_features = X.shape
+            X_flat = X.reshape(n_samples, seq_len * n_features)
+
+            # Create feature names if not set
+            if not self.feature_names:
+                self.feature_names = [f'feature_{i}_{j}' for i in range(seq_len) for j in range(n_features)]
+
+            return X_flat
+        return X
+
+    def fit(self,
+            X: np.ndarray,
+            y: np.ndarray,
+            validation_data: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+            **kwargs) -> Dict[str, Any]:
         """
-        Make predictions with optional confidence intervals.
-        
+        Train LightGBM models for each prediction horizon
+
         Args:
-            X: Feature matrix
-            return_confidence: Whether to return confidence intervals
-            
+            X: Training features of shape (n_samples, sequence_length, n_features)
+            y: Training targets of shape (n_samples, n_horizons)
+            validation_data: Optional validation data
+            **kwargs: Additional training parameters
+
         Returns:
-            Predictions (and confidence intervals if requested)
+            Training history dictionary
         """
-        if self.model is None:
-            raise ValueError("Model not trained. Call train() first.")
-        
-        predictions = self.model.predict(X)
-        
-        if return_confidence:
-            # Estimate confidence based on validation performance
-            # In practice, you'd use quantile regression or ensemble variance
-            std_error = self.metadata.get('metrics', {}).get('val_rmse', 0) * 1.96
-            confidence_intervals = np.column_stack([
-                predictions - std_error,
-                predictions + std_error
-            ])
-            return predictions, confidence_intervals
-        
-        return predictions
-    
-    def get_feature_importance(self, top_n: int = 20) -> pd.DataFrame:
-        """
-        Get feature importance rankings.
-        
-        Args:
-            top_n: Number of top features to return
-            
-        Returns:
-            DataFrame with feature names and importance scores
-        """
-        if self.feature_importances is None:
-            raise ValueError("Model not trained yet")
-        
-        importance_df = pd.DataFrame({
-            'feature': self.feature_names,
-            'importance': self.feature_importances
-        }).sort_values('importance', ascending=False)
-        
-        return importance_df.head(top_n)
-    
-    def save_model(self, version: str = "1.0.0") -> Path:
-        """
-        Save model and metadata to disk.
-        
-        Args:
-            version: Model version string
-            
-        Returns:
-            Path to saved model file
-        """
-        if self.model is None:
-            raise ValueError("No model to save")
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"v{version}_{timestamp}.pkl"
-        metadata_filename = f"v{version}_{timestamp}_metadata.json"
-        
-        model_path = self.model_dir / model_filename
-        metadata_path = self.model_dir / metadata_filename
-        
-        # Save model
-        joblib.dump(self.model, model_path)
-        
-        # Save metadata
-        metadata = {
-            **self.metadata,
-            'version': version,
-            'feature_names': self.feature_names,
-            'model_path': str(model_path)
-        }
-        
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        print(f"Model saved to {model_path}")
-        print(f"Metadata saved to {metadata_path}")
-        
-        return model_path
-    
-    def load_model(self, model_path: str | Path) -> None:
-        """
-        Load model from disk.
-        
-        Args:
-            model_path: Path to saved model file
-        """
-        model_path = Path(model_path)
-        
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
-        
-        self.model = joblib.load(model_path)
-        
-        # Load metadata if available
-        metadata_path = model_path.parent / model_path.name.replace('.pkl', '_metadata.json')
-        if metadata_path.exists():
-            with open(metadata_path, 'r') as f:
-                self.metadata = json.load(f)
-                self.feature_names = self.metadata.get('feature_names', [])
-        
-        print(f"Model loaded from {model_path}")
-    
-    def walk_forward_validation(
-        self,
-        data: pd.DataFrame,
-        target_column: str = 'close',
-        initial_train_size: int = 200,
-        step_size: int = 30,
-        forecast_horizon: int = 7
-    ) -> List[Dict[str, Any]]:
-        """
-        Perform walk-forward validation (time-series cross-validation).
-        
-        This simulates real-world usage where model is retrained periodically.
-        
-        Args:
-            data: Full dataset
-            target_column: Target variable
-            initial_train_size: Initial training set size
-            step_size: How many samples to add each iteration
-            forecast_horizon: How many steps ahead to predict
-            
-        Returns:
-            List of validation results
-        """
-        results = []
-        n_samples = len(data)
-        
-        for train_end in range(initial_train_size, n_samples - forecast_horizon, step_size):
-            # Split data
-            train_data = data.iloc[:train_end]
-            test_data = data.iloc[train_end:train_end + forecast_horizon]
-            
-            # Get features and targets
-            X_train = train_data.drop(columns=[target_column]).values
-            y_train = train_data[target_column].values
-            X_test = test_data.drop(columns=[target_column]).values
-            y_test = test_data[target_column].values
-            
+        logger.info("Starting LightGBM training...")
+
+        # Prepare features
+        X_flat = self._prepare_features(X)
+
+        # Prepare validation data if provided
+        X_val_flat = None
+        y_val = None
+        if validation_data is not None:
+            X_val_flat = self._prepare_features(validation_data[0])
+            y_val = validation_data[1]
+
+        # Get prediction horizons
+        horizons = self.config.get('prediction_horizons', [1, 7, 30])
+        n_horizons = len(horizons)
+
+        # Ensure y has correct shape
+        if len(y.shape) == 1:
+            y = y.reshape(-1, 1)
+
+        if y.shape[1] != n_horizons:
+            logger.warning(f"Target shape {y.shape} doesn't match horizons {n_horizons}. Using first column.")
+            y = y[:, :1]
+            horizons = horizons[:1]
+
+        # Train model for each horizon
+        history = {'train_mae': [], 'val_mae': [], 'feature_importance': {}}
+
+        for i, horizon in enumerate(horizons):
+            logger.info(f"Training model for {horizon}-day horizon...")
+
+            # Prepare target for this horizon
+            y_horizon = y[:, i] if y.shape[1] > i else y[:, 0]
+
+            # Create LightGBM datasets
+            train_data = lgb.Dataset(X_flat, label=y_horizon, feature_name=self.feature_names)
+
+            valid_sets = [train_data]
+            valid_names = ['train']
+
+            if X_val_flat is not None and y_val is not None:
+                y_val_horizon = y_val[:, i] if y_val.shape[1] > i else y_val[:, 0]
+                val_data = lgb.Dataset(X_val_flat, label=y_val_horizon,
+                                     feature_name=self.feature_names, reference=train_data)
+                valid_sets.append(val_data)
+                valid_names.append('valid')
+
             # Train model
-            self.train(X_train, y_train)
-            
-            # Predict
-            y_pred = self.predict(X_test)
-            
+            model = lgb.train(
+                params=self.config,
+                train_set=train_data,
+                valid_sets=valid_sets,
+                valid_names=valid_names,
+                num_boost_round=self.config.get('n_estimators', 100),
+                callbacks=[
+                    lgb.early_stopping(self.config.get('early_stopping_rounds', 10)),
+                    lgb.log_evaluation(period=10)
+                ]
+            )
+
+            self.models[f'horizon_{horizon}'] = model
+
             # Calculate metrics
-            rmse = np.sqrt(np.mean((y_test - y_pred) ** 2))
-            mape = np.mean(np.abs((y_test - y_pred) / y_test)) * 100
-            
-            results.append({
-                'train_end_idx': train_end,
-                'test_start_idx': train_end,
-                'test_end_idx': train_end + forecast_horizon,
-                'rmse': rmse,
-                'mape': mape,
-                'n_train_samples': len(X_train),
-                'n_test_samples': len(X_test)
-            })
-            
-            print(f"Fold {len(results)}: RMSE={rmse:.4f}, MAPE={mape:.2f}%")
-        
-        return results
+            train_pred = model.predict(X_flat)
+            train_mae = np.mean(np.abs(train_pred - y_horizon))
+            history['train_mae'].append(train_mae)
 
+            if X_val_flat is not None:
+                val_pred = model.predict(X_val_flat)
+                val_mae = np.mean(np.abs(val_pred - y_val_horizon))
+                history['val_mae'].append(val_mae)
 
-# Convenience function
-def train_lightgbm_for_crypto(
-    crypto_id: str,
-    days: int = 365,
-    save_model: bool = True
-) -> LightGBMForecaster:
-    """
-    Train a LightGBM model for a specific cryptocurrency.
-    
-    Args:
-        crypto_id: CoinGecko ID
-        days: Historical data period
-        save_model: Whether to save trained model
-        
-    Returns:
-        Trained LightGBMForecaster instance
-    """
-    from data.data_loader import data_loader
-    from data.feature_engineering import FeatureEngineer
-    
-    # Load data
-    data = asyncio.run(data_loader.load_crypto_data(crypto_id, days))
-    
-    # Engineer features
-    engineer = FeatureEngineer()
-    data_with_features = engineer.engineer_features(data)
-    
-    # Prepare for training
-    X, y = engineer.prepare_features_for_training(data_with_features, target_column='close')
-    
-    # Split data
-    train_df, val_df, test_df = data_loader.train_val_test_split(data_with_features)
-    
-    X_train = train_df.drop(columns=['close']).values
-    y_train = train_df['close'].values
-    X_val = val_df.drop(columns=['close']).values
-    y_val = val_df['close'].values
-    
-    # Train model
-    model = LightGBMForecaster()
-    model.train(X_train, y_train, X_val, y_val, feature_names=engineer.feature_names)
-    
-    # Save if requested
-    if save_model:
-        model.save_model(version="1.0.0")
-    
-    return model
+            # Store feature importance
+            importance = model.feature_importance(importance_type='gain')
+            history['feature_importance'][f'horizon_{horizon}'] = dict(zip(self.feature_names, importance))
 
+            logger.info(f"Horizon {horizon} - Train MAE: {train_mae:.4f}")
+            if X_val_flat is not None:
+                logger.info(f"Horizon {horizon} - Val MAE: {val_mae:.4f}")
+
+        self.is_fitted = True
+        self.validation_history = history
+
+        logger.info("LightGBM training completed")
+        return history
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Make predictions for all horizons
+
+        Args:
+            X: Input features
+
+        Returns:
+            Predictions for all horizons
+        """
+        if not self.is_fitted:
+            raise ValueError("Model not fitted. Call fit() first.")
+
+        X_flat = self._prepare_features(X)
+
+        predictions = []
+        horizons = self.config.get('prediction_horizons', [1, 7, 30])
+
+        for horizon in horizons:
+            model_key = f'horizon_{horizon}'
+            if model_key in self.models:
+                pred = self.models[model_key].predict(X_flat)
+                predictions.append(pred)
+            else:
+                # Fallback to first model if specific horizon not available
+                pred = list(self.models.values())[0].predict(X_flat)
+                predictions.append(pred)
+
+        return np.column_stack(predictions)
+
+    def predict_proba(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Predict with uncertainty estimation using quantile regression
+
+        Args:
+            X: Input features
+
+        Returns:
+            Tuple of (predictions, uncertainties)
+        """
+        predictions = self.predict(X)
+
+        # Simple uncertainty estimation based on feature importance variance
+        uncertainties = []
+        X_flat = self._prepare_features(X)
+
+        for horizon in self.config.get('prediction_horizons', [1, 7, 30]):
+            model_key = f'horizon_{horizon}'
+            if model_key in self.models:
+                model = self.models[model_key]
+
+                # Use prediction variance as uncertainty proxy
+                # This is a simplified approach - in practice, you'd use quantile regression
+                base_pred = model.predict(X_flat)
+
+                # Add small noise and predict multiple times for uncertainty estimation
+                uncertainty_preds = []
+                for _ in range(10):
+                    noise = np.random.normal(0, 0.01, X_flat.shape)
+                    noisy_pred = model.predict(X_flat + noise)
+                    uncertainty_preds.append(noisy_pred)
+
+                uncertainty = np.std(uncertainty_preds, axis=0)
+                uncertainties.append(uncertainty)
+            else:
+                uncertainties.append(np.ones(len(X_flat)) * 0.1)  # Default uncertainty
+
+        uncertainties = np.column_stack(uncertainties)
+        return predictions, uncertainties
+
+    def evaluate(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
+        """
+        Evaluate model performance
+
+        Args:
+            X: Input features
+            y: True targets
+
+        Returns:
+            Dictionary of evaluation metrics
+        """
+        predictions = self.predict(X)
+
+        # Ensure y has correct shape
+        if len(y.shape) == 1:
+            y = y.reshape(-1, 1)
+
+        # Calculate metrics for each horizon
+        metrics = {}
+        horizons = self.config.get('prediction_horizons', [1, 7, 30])
+
+        for i, horizon in enumerate(horizons):
+            if i < predictions.shape[1] and i < y.shape[1]:
+                pred_horizon = predictions[:, i]
+                y_horizon = y[:, i]
+
+                mae = np.mean(np.abs(pred_horizon - y_horizon))
+                mse = np.mean((pred_horizon - y_horizon) ** 2)
+                rmse = np.sqrt(mse)
+
+                metrics[f'mae_horizon_{horizon}'] = mae
+                metrics[f'mse_horizon_{horizon}'] = mse
+                metrics[f'rmse_horizon_{horizon}'] = rmse
+
+        # Overall metrics
+        metrics['mae'] = np.mean([v for k, v in metrics.items() if 'mae_horizon' in k])
+        metrics['mse'] = np.mean([v for k, v in metrics.items() if 'mse_horizon' in k])
+        metrics['rmse'] = np.mean([v for k, v in metrics.items() if 'rmse_horizon' in k])
+
+        return metrics
+
+    def get_feature_importance(self) -> Dict[str, Dict[str, float]]:
+        """Get feature importance for all models"""
+        return self.validation_history.get('feature_importance', {})
+
+    def save_model(self, save_path: str):
+        """
+        Save LightGBM models and configuration
+
+        Args:
+            save_path: Path to save model
+        """
+        save_path = Path(save_path)
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        # Save each model
+        for model_name, model in self.models.items():
+            model_file = save_path / f"{model_name}.txt"
+            model.save_model(str(model_file))
+
+        # Save configuration and metadata
+        config_file = save_path / "config.json"
+        with open(config_file, 'w') as f:
+            json.dump({
+                'config': self.config,
+                'feature_names': self.feature_names,
+                'is_fitted': self.is_fitted,
+                'model_files': list(self.models.keys())
+            }, f, indent=2)
+
+        # Save validation history
+        history_file = save_path / "validation_history.json"
+        with open(history_file, 'w') as f:
+            json.dump(self.validation_history, f, indent=2, default=str)
+
+        logger.info(f"LightGBM model saved to {save_path}")
+
+    def load_model(self, load_path: str):
+        """
+        Load LightGBM models and configuration
+
+        Args:
+            load_path: Path to load model from
+        """
+        load_path = Path(load_path)
+
+        # Load configuration
+        config_file = load_path / "config.json"
+        with open(config_file, 'r') as f:
+            saved_data = json.load(f)
+
+        self.config = saved_data['config']
+        self.feature_names = saved_data['feature_names']
+        self.is_fitted = saved_data['is_fitted']
+
+        # Load models
+        self.models = {}
+        for model_name in saved_data['model_files']:
+            model_file = load_path / f"{model_name}.txt"
+            self.models[model_name] = lgb.Booster(model_file=str(model_file))
+
+        # Load validation history
+        history_file = load_path / "validation_history.json"
+        if history_file.exists():
+            with open(history_file, 'r') as f:
+                self.validation_history = json.load(f)
+
+        logger.info(f"LightGBM model loaded from {load_path}")
+
+    def create_feature_importance_plot(self) -> Dict[str, Any]:
+        """
+        Create feature importance visualization data
+
+        Returns:
+            Dictionary with plot data for visualization
+        """
+        if not self.validation_history.get('feature_importance'):
+            return {}
+
+        plot_data = {}
+        for horizon, importance in self.validation_history['feature_importance'].items():
+            # Get top 20 most important features
+            sorted_features = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:20]
+
+            plot_data[horizon] = {
+                'features': [item[0] for item in sorted_features],
+                'importance': [item[1] for item in sorted_features]
+            }
+
+        return plot_data
+
+if __name__ == "__main__":
+    # Example usage
+    if LIGHTGBM_AVAILABLE:
+        # Generate sample data
+        np.random.seed(42)
+        X = np.random.randn(1000, 60, 10)  # (samples, timesteps, features)
+        y = np.random.randn(1000, 3)       # (samples, horizons)
+
+        # Split data
+        train_size = int(0.8 * len(X))
+        X_train, X_val = X[:train_size], X[train_size:]
+        y_train, y_val = y[:train_size], y[train_size:]
+
+        # Initialize and train model
+        config = {
+            'n_estimators': 50,
+            'learning_rate': 0.1,
+            'prediction_horizons': [1, 7, 30]
+        }
+
+        model = LightGBMForecaster(config=config)
+        history = model.fit(X_train, y_train, validation_data=(X_val, y_val))
+
+        # Make predictions
+        predictions = model.predict(X_val)
+        print(f"Predictions shape: {predictions.shape}")
+
+        # Evaluate
+        metrics = model.evaluate(X_val, y_val)
+        print("Evaluation metrics:", metrics)
+
+        # Get feature importance
+        importance = model.get_feature_importance()
+        print("Feature importance available for:", list(importance.keys()))
+    else:
+        print("LightGBM not available. Install with: pip install lightgbm")

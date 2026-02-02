@@ -75,7 +75,9 @@ htmlcov/
 .claude
 
 # data
-data/
+data/kaggle-extracted/
+data/processed/
+data/features/
 
 # analysis results
 ANALYSIS_DOCUMENTATION.md

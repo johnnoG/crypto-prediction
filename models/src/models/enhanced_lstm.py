@@ -277,13 +277,10 @@ class EnhancedLSTMForecaster:
             # Weight shorter horizons more heavily
             loss_weights = {f'output_{h}d': 1.0 / np.sqrt(h) for h in self.config['multi_step']}
 
-            per_output_metrics = {f'output_{h}d': ['mae', 'mse'] for h in self.config['multi_step']}
-
             model.compile(
                 optimizer=optimizer,
                 loss=losses,
                 loss_weights=loss_weights,
-                metrics=per_output_metrics
             )
 
         return model
@@ -381,10 +378,10 @@ class EnhancedLSTMForecaster:
                 verbose=1
             ),
             callbacks.ModelCheckpoint(
-                filepath=str(self.model_dir / 'best_enhanced_lstm.h5'),
+                filepath=str(self.model_dir / 'best_enhanced_lstm.weights.h5'),
                 monitor='val_loss' if X_val is not None else 'loss',
                 save_best_only=True,
-                save_weights_only=False
+                save_weights_only=True
             )
         ]
 
@@ -398,6 +395,20 @@ class EnhancedLSTMForecaster:
                 return lr * 0.90
 
         callback_list.append(callbacks.LearningRateScheduler(lr_schedule, verbose=0))
+
+        # Per-batch progress logging
+        class _BatchProgress(callbacks.Callback):
+            def on_epoch_begin(self, epoch, logs=None):
+                self._epoch = epoch
+                self._t0 = __import__('time').time()
+                self._steps = self.params.get('steps', '?')
+            def on_batch_end(self, batch, logs=None):
+                if batch > 0 and batch % 20 == 0:
+                    loss = logs.get('loss', 0)
+                    elapsed = __import__('time').time() - self._t0
+                    print(f"  [LSTM] Epoch {self._epoch+1} | batch {batch}/{self._steps} | "
+                          f"loss: {loss:.4f} | {elapsed:.0f}s", flush=True)
+        callback_list.append(_BatchProgress())
 
         # Prepare validation data
         validation_data = (X_val, y_val) if X_val is not None else None

@@ -60,6 +60,38 @@ from models.transformer_model import TransformerForecaster
 from models.lightgbm_model import LightGBMForecaster
 from models.advanced_ensemble import AdvancedEnsemble
 
+import tensorflow as tf
+
+
+class BatchProgressCallback(tf.keras.callbacks.Callback):
+    """Prints per-batch progress so you can see training is moving."""
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.epoch = epoch
+        self.epoch_start = time.time()
+        self.total_batches = None
+
+    def on_train_begin(self, logs=None):
+        total_samples = self.params.get('samples') or self.params.get('steps', 0) * (self.params.get('batch_size', 32))
+        self.total_batches = self.params.get('steps', '?')
+        logger.info(f"Training started — {self.params.get('epochs')} epochs, {self.total_batches} batches/epoch")
+
+    def on_batch_end(self, batch, logs=None):
+        if batch > 0 and batch % 20 == 0:
+            loss = logs.get('loss', 0)
+            elapsed = time.time() - self.epoch_start
+            print(f"  Epoch {self.epoch+1} | batch {batch}/{self.total_batches} | "
+                  f"loss: {loss:.4f} | {elapsed:.0f}s elapsed", flush=True)
+
+    def on_epoch_end(self, epoch, logs=None):
+        elapsed = time.time() - self.epoch_start
+        val_loss = logs.get('val_loss', None)
+        loss = logs.get('loss', 0)
+        msg = f"Epoch {epoch+1} done in {elapsed:.1f}s — loss: {loss:.4f}"
+        if val_loss is not None:
+            msg += f", val_loss: {val_loss:.4f}"
+        logger.info(msg)
+
 # Optional MLflow
 try:
     from mlflow_advanced.experiment_manager import create_experiment_manager
@@ -85,9 +117,9 @@ class TrainingConfig:
 
     # Sequence / model params
     sequence_length: int = 60
-    epochs: int = 100
-    batch_size: int = 32
-    max_features: int = 50
+    epochs: int = 150
+    batch_size: int = 64
+    max_features: int = 60
 
     # Ensemble toggle
     train_ensemble: bool = True
@@ -255,10 +287,10 @@ class ProductionTrainer:
         lstm_config = {
             'sequence_length': seq_len,
             'n_features': data['combined_train'].shape[1],
-            'lstm_units': [128, 64, 32],
-            'dense_units': [64, 32],
-            'dropout_rate': 0.2,
-            'recurrent_dropout': 0.1,
+            'lstm_units': [256, 128, 64],
+            'dense_units': [128, 64],
+            'dropout_rate': 0.25,
+            'recurrent_dropout': 0.15,
             'learning_rate': 0.001,
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
@@ -270,7 +302,7 @@ class ProductionTrainer:
             'use_layer_norm': True,
             'multi_step': [1, 7, 30],
             'teacher_forcing_ratio': 0.5,
-            'mc_samples': 50,
+            'mc_samples': 100,
         }
 
         model = EnhancedLSTMForecaster(config=lstm_config, model_dir=artifact_dir)
@@ -317,7 +349,7 @@ class ProductionTrainer:
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
             'early_stopping_patience': 15,
-            'warmup_steps': 500,
+            'warmup_steps': 1000,
             'multi_step': [1, 7, 30],
             'use_causal_mask': True,
         }
@@ -354,16 +386,20 @@ class ProductionTrainer:
             'objective': 'regression',
             'metric': 'mae',
             'boosting_type': 'gbdt',
-            'num_leaves': 63,
-            'learning_rate': 0.05,
-            'feature_fraction': 0.9,
+            'num_leaves': 127,
+            'max_depth': 8,
+            'learning_rate': 0.03,
+            'feature_fraction': 0.85,
             'bagging_fraction': 0.8,
             'bagging_freq': 5,
+            'min_child_samples': 20,
+            'reg_alpha': 0.1,
+            'reg_lambda': 0.1,
             'verbose': -1,
             'random_state': 42,
-            'n_estimators': min(self.config.epochs * 5, 500),
+            'n_estimators': 1000,
             'prediction_horizons': [1, 7, 30],
-            'early_stopping_rounds': 20,
+            'early_stopping_rounds': 50,
         }
 
         model = LightGBMForecaster(config=lgbm_config, model_dir=artifact_dir)

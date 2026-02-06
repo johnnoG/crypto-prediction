@@ -10,7 +10,6 @@ Cryptocurrency markets exhibit fundamentally different statistical behaviors dep
 | **Weakness** | Struggles with long sequences | Data-hungry, computationally heavy | No native temporal modeling |
 | **Best regime** | Trending markets | Volatile / regime-shifting | Mean-reverting / feature-rich |
 | **Inference speed** | Medium (~32ms) | Slow (~45ms) | Fast (~8ms) |
-| **Parameters** | ~306K | ~2.5M | ~50K |
 
 By combining all three, the ensemble captures short-term momentum (LSTM), long-range structural shifts (Transformer), and complex feature interactions (LightGBM) simultaneously. The ensemble's market regime detector dynamically re-weights contributions based on current conditions.
 
@@ -28,43 +27,46 @@ LSTMs are the workhorse of sequential prediction. They maintain an internal cell
 ### Architecture
 
 ```
-Input (60 timesteps x 51 features)
+Input (60 timesteps x 61 features)
   |
   LayerNormalization
   |
-  Bidirectional LSTM (128 units) + Residual Connection
-  |  Dropout (0.2)
+  Bidirectional LSTM (256 units) + Dropout (0.25)
   |
-  Residual LSTM (64 units)
-  |  Dropout (0.2)
+  Residual LSTM (128 units) + LayerNorm + Dropout (0.25)
   |
-  Residual LSTM (32 units)
+  Residual LSTM (64 units) + LayerNorm
   |
-  Attention Layer (learnable position encoding)
+  Attention Layer (learnable weights over all 60 timesteps)
   |
-  Dense (64) -> LayerNorm -> Dense (32) -> LayerNorm
-  |         |         |
-  Head 1d   Head 7d   Head 30d   (multi-step output)
+  Dense (128) -> LayerNorm -> Dropout -> Dense (64) -> LayerNorm -> Dropout
+  |              |              |
+  Head 1d        Head 7d        Head 30d   (multi-step output)
 ```
 
 ### Key Design Choices
 
-- **Bidirectional first layer**: Captures both forward and backward temporal context. Only the first layer is bidirectional to control parameter count.
-- **Residual connections**: Each LSTM cell wraps a standard LSTM with a linear projection skip-connection. This prevents gradient vanishing in deeper stacks and allows the model to learn incremental refinements.
-- **Attention mechanism**: After the LSTM stack, an attention layer computes learned weights over all 60 timesteps. This lets the model focus on the most predictive time points (e.g., a sudden volume spike 12 days ago) rather than treating all timesteps equally.
+- **Bidirectional first layer**: Captures both forward and backward temporal context. Only the first layer is bidirectional to control parameter count while the residual layers process the combined representation sequentially.
+- **Residual connections**: Each `ResidualLSTMCell` wraps a standard LSTM with a linear projection skip-connection and layer normalization. This prevents gradient vanishing in the three-layer stack and allows the model to learn incremental refinements rather than complete transformations at each layer.
+- **Attention mechanism**: After the LSTM stack, a Bahdanau-style attention layer computes learned weights over all 60 timesteps. This lets the model focus on the most predictive time points (e.g., a sudden volume spike 12 days ago or a support level test 45 days ago) rather than relying solely on the final hidden state.
 - **Multi-step heads**: Separate output heads for 1-day, 7-day, and 30-day horizons. Shorter horizons receive higher loss weights (`1/sqrt(h)`) because near-term predictions are more actionable and more feasible.
-- **Monte Carlo dropout**: At inference time, dropout remains active across multiple forward passes (default 50 samples). The variance of predictions provides a calibrated uncertainty estimate without requiring a separate model.
+- **Recurrent dropout (0.15)**: Applied within the LSTM recurrence at each timestep, providing stronger regularization than standard dropout alone. Requires GPU (CuDNN) for acceptable training speed.
+- **Monte Carlo dropout**: At inference time, dropout remains active across 100 forward passes. The variance of predictions provides a calibrated uncertainty estimate without requiring a separate model.
 
-### Hyperparameters
+### Hyperparameters (Production)
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
 | Sequence length | 60 | ~2 months of daily data; captures medium-term patterns |
-| LSTM units | [128, 64, 32] | Tapering width forces compression of learned representations |
-| Learning rate | 0.001 | Standard Adam starting point with ReduceLROnPlateau |
+| LSTM units | [256, 128, 64] | Three-layer stack with tapering width forces hierarchical feature compression |
+| Dense units | [128, 64] | Two dense layers before output heads for non-linear feature combination |
+| Dropout | 0.25 | Moderately aggressive regularization for noisy financial data |
+| Recurrent dropout | 0.15 | Per-timestep regularization within LSTM recurrence |
+| Learning rate | 0.001 | Standard Adam with ReduceLROnPlateau (factor=0.5, patience=8) |
 | Gradient clipping | 1.0 | Prevents exploding gradients common in financial time series |
-| Early stopping patience | 20 | Generous patience since crypto data is noisy |
-| Teacher forcing ratio | 0.5 | Balances training stability with inference-time robustness |
+| Batch size | 64 | Larger batches for GPU utilization and gradient stability |
+| Epochs | 150 | With early stopping (patience=20) typically converges in 40-80 epochs |
+| Loss function | Huber | Less sensitive to outliers than MSE; robust to crypto flash crashes |
 
 ---
 
@@ -78,12 +80,12 @@ Input (60 timesteps x 51 features)
 Transformers process the entire input sequence in parallel through self-attention, computing pairwise relationships between all timesteps simultaneously. This gives them two advantages over LSTMs for crypto prediction:
 
 1. **Long-range dependencies**: Self-attention can directly connect a price pattern from 60 days ago to today's prediction without information passing through 60 sequential gates.
-2. **Multi-scale pattern detection**: Different attention heads naturally specialize on different temporal scales - some learn daily patterns, others weekly cycles, others regime transitions.
+2. **Multi-scale pattern detection**: Different attention heads naturally specialize on different temporal scales — some learn daily patterns, others weekly cycles, others regime transitions.
 
 ### Architecture
 
 ```
-Input (60 timesteps x 51 features)
+Input (60 timesteps x 61 features)
   |
   Dense Projection -> d_model (256)
   |
@@ -92,9 +94,9 @@ Input (60 timesteps x 51 features)
   |
   Transformer Block x4:
   |   Multi-Head Self-Attention (8 heads, causal mask)
-  |   Add & LayerNorm
-  |   Feed-Forward (1024 -> 256)
-  |   Add & LayerNorm
+  |   Residual Add & LayerNorm
+  |   Feed-Forward Network (1024 -> GELU -> 256)
+  |   Residual Add & LayerNorm
   |
   Global Average Pooling
   |
@@ -107,20 +109,23 @@ Input (60 timesteps x 51 features)
 
 - **Causal masking**: The self-attention uses a lower-triangular mask so that each timestep can only attend to itself and earlier timesteps. This prevents information leakage from the future during training.
 - **Learnable positional encoding**: Unlike fixed sinusoidal encoding, learnable embeddings allow the model to discover that "3 days before a prediction" has different significance than "45 days before."
-- **Warmup learning rate schedule**: The standard Transformer schedule (`1/sqrt(d_model) * min(1/sqrt(step), step * warmup^{-1.5})`) starts low, ramps up during warmup, then decays. This is critical because the attention weights are initially random and large gradients early on can destabilize training.
-- **Reduced dimensions (d_model=256, 4 layers)**: Full-scale Transformers (512d, 6 layers) are designed for NLP datasets with millions of sequences. Our dataset (~5000 samples) requires a smaller model to avoid overfitting.
-- **Huber loss per horizon**: Huber loss is less sensitive to outliers than MSE, which matters because crypto prices occasionally have extreme moves that would otherwise dominate the gradient.
+- **Warmup learning rate schedule**: The standard Transformer schedule (`1/sqrt(d_model) * min(1/sqrt(step), step * warmup^{-1.5})`) starts with a very low rate, ramps up during 1000 warmup steps, then decays. This is critical because the attention weights are initially random and large gradients early on can destabilize training.
+- **GELU activation**: Used in the feed-forward network instead of ReLU. GELU provides smoother gradients which helps with the attention mechanism's sensitivity.
+- **Huber loss per horizon**: Less sensitive to outliers than MSE, which matters because crypto prices occasionally have extreme moves that would otherwise dominate the gradient.
 
-### Hyperparameters
+### Hyperparameters (Production)
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| d_model | 256 | Balanced capacity for ~5K sample dataset |
-| Attention heads | 8 | 256/8 = 32 dims per head; allows multi-scale pattern learning |
-| Feed-forward dim | 1024 | 4x d_model (standard ratio) |
-| Transformer layers | 4 | Deeper than needed for sequential data, but attention makes each layer efficient |
-| Warmup steps | 500 | ~15 epochs of warmup at batch_size=32 |
+| d_model | 256 | Balanced capacity for ~5K sample dataset; 256/8 = 32 dims per attention head |
+| Attention heads | 8 | Multi-scale pattern learning; each head sees 32-dimensional projections |
+| Feed-forward dim | 1024 | 4x d_model (standard ratio from "Attention Is All You Need") |
+| Transformer layers | 4 | Deep enough for hierarchical temporal patterns without overfitting |
+| Warmup steps | 1000 | ~30 epochs of warmup at batch_size=64 before full learning rate |
 | Dropout | 0.1 | Light regularization; early stopping handles overfitting |
+| Optimizer | AdamW | Weight decay (0.01) provides additional regularization vs standard Adam |
+| Batch size | 64 | Larger batches for GPU utilization |
+| Epochs | 150 | With early stopping (patience=15) typically converges in 30-60 epochs |
 
 ---
 
@@ -131,10 +136,10 @@ Input (60 timesteps x 51 features)
 
 ### Why Gradient Boosting?
 
-Gradient boosted trees excel at learning non-linear feature interactions from tabular data. While LSTM and Transformer operate on raw sequences, LightGBM consumes the **flattened feature matrix** (60 timesteps x 50 features = 3000 input features). This gives it a fundamentally different view of the data:
+Gradient boosted trees excel at learning non-linear feature interactions from tabular data. While LSTM and Transformer operate on raw sequences, LightGBM consumes the **flattened feature matrix** (60 timesteps x features). This gives it a fundamentally different view of the data:
 
 1. **Feature interactions**: It can discover that "RSI < 30 AND volume > 2x average AND BTC correlation > 0.8" is a strong buy signal, without needing to learn temporal convolutions.
-2. **Speed and interpretability**: Training takes minutes, not hours. Feature importance rankings provide direct insight into which indicators drive predictions.
+2. **Speed and interpretability**: Training takes seconds to minutes, not hours. Feature importance rankings provide direct insight into which indicators drive predictions.
 3. **Robustness to noise**: Tree ensembles are naturally resistant to feature scaling issues, outliers, and irrelevant features.
 
 LightGBM serves as a strong baseline and a diversity driver in the ensemble. Its errors are typically uncorrelated with the deep learning models, which is exactly what makes an ensemble effective.
@@ -142,24 +147,29 @@ LightGBM serves as a strong baseline and a diversity driver in the ensemble. Its
 ### Architecture
 
 ```
-Input (60 timesteps x 50 features) -> Flatten to 3000 features
+Input (60 timesteps x 60 features) -> Flatten to 3600 features
   |
-  GBDT for 1-day horizon (up to 500 trees)
-  GBDT for 7-day horizon (up to 500 trees)
-  GBDT for 30-day horizon (up to 500 trees)
+  GBDT for 1-day horizon  (up to 1000 trees, depth 8)
+  GBDT for 7-day horizon  (up to 1000 trees, depth 8)
+  GBDT for 30-day horizon (up to 1000 trees, depth 8)
 ```
 
 Each horizon gets its own independent model because the optimal tree structure for 1-day prediction is very different from 30-day prediction.
 
-### Hyperparameters
+### Hyperparameters (Production)
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| num_leaves | 63 | Moderate complexity; prevents overfitting on ~3700 training samples |
-| learning_rate | 0.05 | Low rate + many trees = smooth convergence |
-| feature_fraction | 0.9 | Mild column subsampling for diversity |
+| n_estimators | 1000 | Large tree budget; early stopping prevents overfitting |
+| num_leaves | 127 | High complexity capacity for the 3600-dimensional flattened input |
+| max_depth | 8 | Limits individual tree complexity to prevent memorization |
+| learning_rate | 0.03 | Low rate + many trees = smooth convergence and better generalization |
+| feature_fraction | 0.85 | Column subsampling per tree for ensemble diversity |
 | bagging_fraction | 0.8 | Row subsampling reduces variance |
-| early_stopping | 20 rounds | Stops adding trees when validation MAE plateaus |
+| min_child_samples | 20 | Minimum leaf size prevents fitting to noise |
+| reg_alpha | 0.1 | L1 regularization for feature selection |
+| reg_lambda | 0.1 | L2 regularization for weight smoothing |
+| early_stopping | 50 rounds | Stops when validation MAE plateaus |
 
 ---
 
@@ -178,7 +188,7 @@ Our ensemble goes beyond simple averaging with three techniques:
 
 The `MarketRegimeDetector` classifies the current market into one of four regimes using price statistics:
 
-| Regime | Detection Logic | Typical Weight Adjustment |
+| Regime | Detection Logic | Weight Adjustment |
 |--------|----------------|--------------------------|
 | **Trending** | Strong directional momentum, low noise | LSTM weight increases (momentum-sensitive) |
 | **Mean-reverting** | Oscillating around a level, high autocorrelation | LightGBM weight increases (feature-driven) |
@@ -191,15 +201,15 @@ An ElasticNet regression is trained on the base model predictions as features, w
 
 ### 3. Online Weight Adaptation
 
-After each prediction, the ensemble updates model weights based on recent accuracy using exponential moving averages. Models that performed well in the last 50 predictions receive higher weight, enabling real-time adaptation.
+After each prediction, the ensemble updates model weights based on recent accuracy using exponential moving averages. Models that performed well in the last 50 predictions receive higher weight, enabling real-time adaptation without retraining.
 
 ### Default Weights
 
 | Model | Weight | Rationale |
 |-------|--------|-----------|
-| Transformer | 0.40 | Best overall accuracy in backtesting |
-| LSTM | 0.35 | Strong on trending / momentum markets |
-| LightGBM | 0.25 | Fast inference, stable baseline, error diversity |
+| Transformer | 0.40 | Strongest on structural patterns and regime changes |
+| LSTM | 0.35 | Best for trending / momentum-driven markets |
+| LightGBM | 0.25 | Fast inference, stable baseline, uncorrelated errors |
 
 ---
 
@@ -214,28 +224,31 @@ Raw Parquet (5600+ rows, 150+ features per crypto)
 [1] Clean: drop non-numeric, handle NaN, remove >50% missing cols
      |
      v
-[2] Feature Selection: top 50 features by correlation with close price
+[2] Feature Selection: top 60 features by absolute correlation with close price
      |
      v
-[3] Scale: RobustScaler (fit on train only) - handles crypto outliers
+[3] Scale: RobustScaler (fit on train split only)
      |
      v
-[4] Split: 70% train / 15% validation / 15% test (chronological, no shuffle)
+[4] Split: 70% train / 15% validation / 15% test (strict chronological order)
      |
      v
 [5] Sequence: sliding window of 60 days, target = close at +1/+7/+30 days
      |
      v
-[6] Train: LSTM -> Transformer -> LightGBM -> Ensemble
+[6] Train: LSTM -> Transformer -> LightGBM -> Ensemble (sequential)
      |
      v
-[7] Evaluate: per-horizon RMSE/MAE/R2 on held-out test set
+[7] Evaluate: per-horizon RMSE / MAE / R-squared on held-out test set
      |
      v
-[8] Visualize: 10 PNG plots saved to training_output/
+[8] Visualize: 10 PNG diagnostic plots saved to training_output/
      |
      v
-[9] Save: model weights to models/artifacts/
+[9] Save: model weights to models/artifacts/ + training report JSON
+     |
+     v
+[10] Log: all metrics, configs, and artifacts to MLflow
 ```
 
 ### Why Chronological Splits (Not Random)?
@@ -244,15 +257,15 @@ Cryptocurrency prices are non-stationary time series. A random train/test split 
 
 - **Train**: oldest 70% of data (learns historical patterns)
 - **Validation**: next 15% (tunes hyperparameters, triggers early stopping)
-- **Test**: newest 15% (final unbiased evaluation)
+- **Test**: newest 15% (final unbiased evaluation — never seen during training)
 
 ### Why RobustScaler?
 
-Crypto prices have extreme outliers (flash crashes, parabolic rallies). `RobustScaler` uses the interquartile range instead of standard deviation, making it far more resistant to these events than `StandardScaler` or `MinMaxScaler`.
+Crypto prices have extreme outliers (flash crashes, parabolic rallies). `RobustScaler` uses the interquartile range instead of standard deviation, making it far more resistant to these events than `StandardScaler` or `MinMaxScaler`. Critically, the scaler is fit only on training data to prevent data leakage.
 
 ### Multi-Step Forecasting
 
-All models predict three horizons simultaneously:
+All models predict three horizons simultaneously through separate output heads:
 
 | Horizon | Use Case | Difficulty |
 |---------|----------|------------|
@@ -266,13 +279,13 @@ Shorter horizons receive higher loss weights during training because they are mo
 
 ## Training Visualizations
 
-The training script generates the following plots for each cryptocurrency:
+The training script generates 10 diagnostic plots per cryptocurrency:
 
 | Plot | What It Shows |
 |------|---------------|
 | `loss_curves.png` | Train vs validation loss per epoch for each model |
 | `metrics_progression.png` | MAE/MSE per horizon over training epochs |
-| `learning_rates.png` | Learning rate schedules (decay, warmup, plateau reduction) |
+| `learning_rates.png` | LR schedules (decay, warmup, plateau reduction) |
 | `attention_heatmap.png` | LSTM attention weights showing which timesteps the model focuses on |
 | `feature_importance.png` | Top 30 LightGBM features ranked by importance |
 | `model_comparison.png` | Side-by-side RMSE/MAE bars for all models at each horizon |
@@ -285,31 +298,42 @@ The training script generates the following plots for each cryptocurrency:
 
 ## Running Training
 
+**GPU is required for production training.** Google Colab (T4/A100) is recommended. On a T4 GPU, full training takes approximately 15-30 minutes per cryptocurrency.
+
 ```bash
-# Train on BTC and ETH (full training)
+# Full production training for BTC and ETH
 python models/src/train_production.py --crypto BTC,ETH
 
-# Quick test run (3 epochs)
-python models/src/train_production.py --crypto BTC --epochs 3
-
-# Skip ensemble (faster, individual models only)
-python models/src/train_production.py --crypto BTC --no-ensemble
+# Quick test run (3 epochs, skip ensemble)
+python models/src/train_production.py --crypto BTC --epochs 3 --no-ensemble
 
 # Custom configuration
-python models/src/train_production.py --crypto BTC,ETH --epochs 50 --batch-size 64 --seq-length 30
+python models/src/train_production.py --crypto BTC,ETH,SOL --epochs 200 --batch-size 64 --seq-length 30
+
+# All available options
+python models/src/train_production.py --help
 ```
 
-### Output
+### Output Structure
 
 ```
 models/src/training_output/{CRYPTO}_{timestamp}/
-    *.png             # All visualization plots
-    training_report.json   # Machine-readable metrics
+    loss_curves.png
+    metrics_progression.png
+    learning_rates.png
+    attention_heatmap.png
+    feature_importance.png
+    model_comparison.png
+    predictions_vs_actual.png
+    residual_analysis.png
+    ensemble_weights.png
+    training_summary.png
+    training_report.json
 
 models/artifacts/
-    enhanced_lstm/    # Saved LSTM weights (.h5) + metadata
-    transformer/      # Saved Transformer weights (.h5) + metadata
-    lightgbm/         # Saved LightGBM trees (.txt) + config
+    enhanced_lstm/     # .weights.h5 + metadata JSON
+    transformer/       # .weights.h5 + metadata JSON
+    lightgbm/          # .txt model files + config JSON
     advanced_ensemble/ # Ensemble metadata + meta-learner
 ```
 
@@ -330,19 +354,31 @@ The input features (150+ per cryptocurrency) fall into these categories:
 | Time-based | ~14 | Day of week, month, quarter (cyclical sine/cosine encoding) |
 | Regime | ~5 | Bull/bear flags, high-volatility regime, market stress |
 
-Feature selection narrows this to the top 50 by absolute Pearson correlation with the close price. This removes noise features and reduces overfitting risk.
+Feature selection narrows this to the top 60 by absolute Pearson correlation with the close price, removing noise features and reducing overfitting risk.
 
 ---
 
 ## MLflow Experiment Tracking
 
-All training runs are logged to MLflow (local file store by default):
+All training runs are automatically logged to MLflow (local file store):
 
-- **Parameters**: model configs, sequence length, epochs, feature count
-- **Metrics**: per-epoch loss, MAE, MSE, learning rate; final test RMSE/MAE/R2
+- **Parameters**: model configs, sequence length, epochs, batch size, feature count
+- **Metrics**: per-epoch loss, MAE, MSE, learning rate; final test RMSE/MAE/R-squared per horizon
 - **Artifacts**: saved model weights, visualization PNGs, training report JSON
 
 Access the MLflow UI:
 ```bash
 mlflow ui --backend-store-uri file://models/src/mlruns_production --port 5000
 ```
+
+---
+
+## Hardware Requirements
+
+| Setup | LSTM Epoch | Transformer Epoch | Full Training |
+|-------|-----------|-------------------|---------------|
+| CPU (M1 Mac) | ~5-10 min | ~3-8 min | Not recommended |
+| Google Colab T4 | ~5-15 sec | ~3-10 sec | ~15-30 min per coin |
+| A100 GPU | ~2-5 sec | ~1-3 sec | ~5-10 min per coin |
+
+The LSTM with `recurrent_dropout > 0` requires GPU for the CuDNN kernel. On CPU, recurrent dropout forces a pure Python fallback that is orders of magnitude slower.

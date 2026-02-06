@@ -53,11 +53,22 @@ except ImportError:
     MLFLOW_AVAILABLE = False
 
 # Import our modules
-from ..models.transformer_model import TransformerForecaster
-from ..models.enhanced_lstm import EnhancedLSTMForecaster
-from ..models.lightgbm_model import LightGBMForecaster
-from ..models.advanced_ensemble import AdvancedEnsemble
-from ..mlflow_advanced.experiment_manager import AdvancedExperimentManager, create_experiment_manager
+try:
+    from ..models.transformer_model import TransformerForecaster
+    from ..models.enhanced_lstm import EnhancedLSTMForecaster
+    from ..models.lightgbm_model import LightGBMForecaster
+    from ..models.advanced_ensemble import AdvancedEnsemble
+    from ..mlflow_advanced.experiment_manager import AdvancedExperimentManager, create_experiment_manager
+except ImportError:
+    # Handle direct execution
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent))
+    from models.transformer_model import TransformerForecaster
+    from models.enhanced_lstm import EnhancedLSTMForecaster
+    from models.lightgbm_model import LightGBMForecaster
+    from models.advanced_ensemble import AdvancedEnsemble
+    from mlflow_advanced.experiment_manager import AdvancedExperimentManager, create_experiment_manager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

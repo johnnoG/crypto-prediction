@@ -296,9 +296,10 @@ class DeploymentValidator:
 class BlueGreenDeploymentManager:
     """Manages blue-green deployments for zero downtime"""
 
-    def __init__(self):
+    def __init__(self, demo_mode: bool = False):
         self.active_deployments = {}  # deployment_id -> DeploymentInfo
         self.traffic_router = TrafficRouter()
+        self.demo_mode = demo_mode
 
     def deploy_blue_green(
         self,
@@ -362,7 +363,12 @@ class BlueGreenDeploymentManager:
         """Deploy the green version"""
         logger.info(f"Deploying green version: {deployment_info.model_version}")
 
-        # Simulate deployment process
+        if self.demo_mode:
+            time.sleep(0.5)  # Brief simulated deployment
+            deployment_info.endpoint_url = f"http://green.{deployment_info.model_name}.local:8000"
+            logger.info(f"[DEMO] Green deployment ready: {deployment_info.endpoint_url}")
+            return
+
         # In production, this would:
         # 1. Pull model from MLflow registry
         # 2. Create container/service
@@ -379,6 +385,11 @@ class BlueGreenDeploymentManager:
     def _wait_for_healthy(self, deployment_info: DeploymentInfo) -> bool:
         """Wait for deployment to become healthy"""
         logger.info("Waiting for green deployment to become healthy...")
+
+        if self.demo_mode:
+            time.sleep(0.5)  # Brief simulated health check
+            logger.info("[DEMO] Green deployment is healthy (simulated)")
+            return True
 
         health_checker = HealthChecker(deployment_info)
         max_attempts = 30
@@ -397,6 +408,10 @@ class BlueGreenDeploymentManager:
     def _validate_green_version(self, deployment_info: DeploymentInfo) -> bool:
         """Validate green version before traffic switch"""
         logger.info("Validating green deployment...")
+
+        if self.demo_mode:
+            logger.info("[DEMO] Green deployment validation passed (simulated)")
+            return True
 
         validator = DeploymentValidator()
 
@@ -427,6 +442,10 @@ class BlueGreenDeploymentManager:
             )
 
             logger.info(f"Routing {percentage}% traffic to green deployment")
+
+            if self.demo_mode:
+                time.sleep(0.2)  # Brief simulated wait
+                continue
 
             # Monitor for a period before increasing traffic
             time.sleep(30)
@@ -554,10 +573,11 @@ class TrafficRouter:
 class DeploymentManager:
     """Main deployment manager orchestrating all deployment operations"""
 
-    def __init__(self, mlflow_tracking_uri: str = "file://./mlruns"):
+    def __init__(self, mlflow_tracking_uri: str = "file://./mlruns", demo_mode: bool = False):
         self.tracking_uri = mlflow_tracking_uri
-        self.client = MlflowClient(tracking_uri) if MLFLOW_AVAILABLE else None
-        self.blue_green_manager = BlueGreenDeploymentManager()
+        self.demo_mode = demo_mode
+        self.client = MlflowClient(self.tracking_uri) if MLFLOW_AVAILABLE else None
+        self.blue_green_manager = BlueGreenDeploymentManager(demo_mode=demo_mode)
         self.deployment_registry = {}
         self.approval_queue = {}
 
@@ -774,9 +794,9 @@ class DeploymentManager:
             return ""
 
 
-def create_deployment_manager(mlflow_tracking_uri: str = "file://./mlruns") -> DeploymentManager:
+def create_deployment_manager(mlflow_tracking_uri: str = "file://./mlruns", demo_mode: bool = False) -> DeploymentManager:
     """Create a deployment manager instance"""
-    return DeploymentManager(mlflow_tracking_uri)
+    return DeploymentManager(mlflow_tracking_uri, demo_mode=demo_mode)
 
 
 if __name__ == "__main__":

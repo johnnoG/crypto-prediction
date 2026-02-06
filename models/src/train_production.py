@@ -1,0 +1,1140 @@
+"""
+Production Training Script for Cryptocurrency Price Prediction
+
+Trains LSTM, Transformer, LightGBM, and Ensemble models on real feature data,
+generates rich matplotlib visualizations, saves models, and logs to MLflow.
+
+Usage:
+    python models/src/train_production.py --crypto BTC,ETH
+    python models/src/train_production.py --crypto BTC --epochs 5
+    python models/src/train_production.py --crypto BTC --no-ensemble
+"""
+
+import os
+import sys
+import argparse
+import logging
+import json
+import time
+import warnings
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, asdict
+
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import RobustScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+# Add current directory to path for imports
+current_dir = Path(__file__).parent
+project_root = current_dir.parent.parent
+sys.path.insert(0, str(current_dir))
+
+# Set MLflow tracking URI before imports
+mlflow_dir = current_dir / "mlruns_production"
+mlflow_dir.mkdir(exist_ok=True)
+os.environ['MLFLOW_TRACKING_URI'] = f"file://{mlflow_dir}"
+
+warnings.filterwarnings('ignore')
+
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for saving plots
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette("husl")
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Import models
+from models.enhanced_lstm import EnhancedLSTMForecaster
+from models.transformer_model import TransformerForecaster
+from models.lightgbm_model import LightGBMForecaster
+from models.advanced_ensemble import AdvancedEnsemble
+
+# Optional MLflow
+try:
+    from mlflow_advanced.experiment_manager import create_experiment_manager
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+@dataclass
+class TrainingConfig:
+    """Production training configuration."""
+    # Data
+    crypto: str = "BTC"
+    features_dir: str = str(project_root / "data" / "features")
+
+    # Splits (chronological)
+    train_ratio: float = 0.70
+    val_ratio: float = 0.15
+
+    # Sequence / model params
+    sequence_length: int = 60
+    epochs: int = 100
+    batch_size: int = 32
+    max_features: int = 50
+
+    # Ensemble toggle
+    train_ensemble: bool = True
+
+    # Output
+    output_dir: str = str(current_dir / "training_output")
+    artifacts_dir: str = str(current_dir.parent / "artifacts")
+
+
+# ---------------------------------------------------------------------------
+# Data Loading
+# ---------------------------------------------------------------------------
+
+class ProductionDataLoader:
+    """Load parquet feature data and prepare for training."""
+
+    def __init__(self, config: TrainingConfig):
+        self.config = config
+        self.feature_scaler: Optional[RobustScaler] = None
+        self.target_scaler: Optional[RobustScaler] = None
+        self.feature_names: List[str] = []
+
+    # -- public API ----------------------------------------------------------
+
+    def load_and_prepare(self) -> Dict[str, Any]:
+        """Full pipeline: load → clean → select → scale → split → sequence."""
+        df = self._load_parquet()
+        df = self._clean(df)
+        feature_cols = self._select_features(df)
+        self.feature_names = feature_cols
+
+        # Chronological split indices
+        n = len(df)
+        train_end = int(n * self.config.train_ratio)
+        val_end = int(n * (self.config.train_ratio + self.config.val_ratio))
+
+        train_df = df.iloc[:train_end]
+        val_df = df.iloc[train_end:val_end]
+        test_df = df.iloc[val_end:]
+
+        logger.info(f"Split sizes — train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
+
+        # Scale (fit on train only)
+        self.feature_scaler = RobustScaler()
+        self.target_scaler = RobustScaler()
+
+        X_train = self.feature_scaler.fit_transform(train_df[feature_cols].values)
+        X_val = self.feature_scaler.transform(val_df[feature_cols].values)
+        X_test = self.feature_scaler.transform(test_df[feature_cols].values)
+
+        y_train_raw = train_df['close'].values
+        y_val_raw = val_df['close'].values
+        y_test_raw = test_df['close'].values
+
+        y_train = self.target_scaler.fit_transform(y_train_raw.reshape(-1, 1)).ravel()
+        y_val = self.target_scaler.transform(y_val_raw.reshape(-1, 1)).ravel()
+        y_test = self.target_scaler.transform(y_test_raw.reshape(-1, 1)).ravel()
+
+        # Build combined arrays for prepare_sequences (target as col 0)
+        combined_train = np.column_stack([y_train.reshape(-1, 1), X_train])
+        combined_val = np.column_stack([y_val.reshape(-1, 1), X_val])
+        combined_test = np.column_stack([y_test.reshape(-1, 1), X_test])
+
+        return {
+            'combined_train': combined_train,
+            'combined_val': combined_val,
+            'combined_test': combined_test,
+            'X_train': X_train, 'X_val': X_val, 'X_test': X_test,
+            'y_train': y_train, 'y_val': y_val, 'y_test': y_test,
+            'y_train_raw': y_train_raw, 'y_val_raw': y_val_raw, 'y_test_raw': y_test_raw,
+            'feature_names': feature_cols,
+            'dates_train': train_df.index,
+            'dates_val': val_df.index,
+            'dates_test': test_df.index,
+        }
+
+    # -- internals -----------------------------------------------------------
+
+    def _load_parquet(self) -> pd.DataFrame:
+        path = Path(self.config.features_dir) / f"{self.config.crypto}_features.parquet"
+        if not path.exists():
+            raise FileNotFoundError(f"Feature file not found: {path}")
+        df = pd.read_parquet(path)
+        logger.info(f"Loaded {self.config.crypto}: {df.shape[0]} rows, {df.shape[1]} cols")
+        return df
+
+    def _clean(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Drop ticker column if present
+        if 'ticker' in df.columns:
+            df = df.drop(columns=['ticker'])
+
+        # Keep only numeric columns
+        df = df.select_dtypes(include=[np.number])
+
+        # Drop columns with >50% NaN
+        thresh = len(df) * 0.5
+        df = df.dropna(axis=1, thresh=int(thresh))
+
+        # Forward-fill then drop remaining NaN rows
+        df = df.ffill()
+        df = df.dropna()
+
+        logger.info(f"After cleaning: {df.shape[0]} rows, {df.shape[1]} cols")
+        return df
+
+    def _select_features(self, df: pd.DataFrame) -> List[str]:
+        """Select top features by absolute correlation with close."""
+        if 'close' not in df.columns:
+            raise ValueError("'close' column not found in data")
+
+        candidates = [c for c in df.columns if c != 'close']
+        corrs = df[candidates].corrwith(df['close']).abs().sort_values(ascending=False)
+        selected = corrs.head(self.config.max_features).index.tolist()
+        logger.info(f"Selected {len(selected)} features (top correlation with close)")
+        return selected
+
+
+# ---------------------------------------------------------------------------
+# Model Training
+# ---------------------------------------------------------------------------
+
+class ProductionTrainer:
+    """Trains all models and collects results."""
+
+    def __init__(self, config: TrainingConfig):
+        self.config = config
+        self.results: Dict[str, Any] = {}
+
+    def train_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Train LSTM, Transformer, LightGBM, and optionally Ensemble."""
+
+        # --- LSTM ---
+        logger.info("=" * 60)
+        logger.info("[1/4] Training Enhanced LSTM...")
+        logger.info("=" * 60)
+        self.results['lstm'] = self._train_lstm(data)
+
+        # --- Transformer ---
+        logger.info("=" * 60)
+        logger.info("[2/4] Training Transformer...")
+        logger.info("=" * 60)
+        self.results['transformer'] = self._train_transformer(data)
+
+        # --- LightGBM ---
+        logger.info("=" * 60)
+        logger.info("[3/4] Training LightGBM...")
+        logger.info("=" * 60)
+        self.results['lightgbm'] = self._train_lightgbm(data)
+
+        # --- Ensemble ---
+        if self.config.train_ensemble:
+            logger.info("=" * 60)
+            logger.info("[4/4] Training Advanced Ensemble...")
+            logger.info("=" * 60)
+            self.results['ensemble'] = self._train_ensemble(data)
+
+        return self.results
+
+    # -- individual trainers -------------------------------------------------
+
+    def _train_lstm(self, data: Dict) -> Dict[str, Any]:
+        seq_len = self.config.sequence_length
+        artifact_dir = str(Path(self.config.artifacts_dir) / "enhanced_lstm")
+
+        lstm_config = {
+            'sequence_length': seq_len,
+            'n_features': data['combined_train'].shape[1],
+            'lstm_units': [128, 64, 32],
+            'dense_units': [64, 32],
+            'dropout_rate': 0.2,
+            'recurrent_dropout': 0.1,
+            'learning_rate': 0.001,
+            'batch_size': self.config.batch_size,
+            'epochs': self.config.epochs,
+            'early_stopping_patience': 20,
+            'gradient_clip': 1.0,
+            'use_bidirectional': True,
+            'use_attention': True,
+            'use_residual': True,
+            'use_layer_norm': True,
+            'multi_step': [1, 7, 30],
+            'teacher_forcing_ratio': 0.5,
+            'mc_samples': 50,
+        }
+
+        model = EnhancedLSTMForecaster(config=lstm_config, model_dir=artifact_dir)
+
+        # Prepare sequences
+        X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
+        X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
+        X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        t0 = time.time()
+        metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
+        train_time = time.time() - t0
+
+        # Keras history dict
+        history = model.training_history.history if model.training_history else {}
+
+        # Test predictions
+        test_preds = model.model.predict(X_test_seq, verbose=0)
+
+        return {
+            'model': model,
+            'metrics': metrics,
+            'history': history,
+            'train_time': train_time,
+            'config': lstm_config,
+            'X_test': X_test_seq,
+            'y_test': y_test_seq,
+            'test_preds': test_preds,
+        }
+
+    def _train_transformer(self, data: Dict) -> Dict[str, Any]:
+        seq_len = self.config.sequence_length
+        artifact_dir = str(Path(self.config.artifacts_dir) / "transformer")
+
+        transformer_config = {
+            'sequence_length': seq_len,
+            'n_features': data['combined_train'].shape[1],
+            'd_model': 256,
+            'num_heads': 8,
+            'ff_dim': 1024,
+            'num_layers': 4,
+            'dropout_rate': 0.1,
+            'learning_rate': 0.0001,
+            'batch_size': self.config.batch_size,
+            'epochs': self.config.epochs,
+            'early_stopping_patience': 15,
+            'warmup_steps': 500,
+            'multi_step': [1, 7, 30],
+            'use_causal_mask': True,
+        }
+
+        model = TransformerForecaster(config=transformer_config, model_dir=artifact_dir)
+
+        X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
+        X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
+        X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        t0 = time.time()
+        metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
+        train_time = time.time() - t0
+
+        history = model.training_history.history if model.training_history else {}
+
+        test_preds = model.model.predict(X_test_seq, verbose=0)
+
+        return {
+            'model': model,
+            'metrics': metrics,
+            'history': history,
+            'train_time': train_time,
+            'config': transformer_config,
+            'X_test': X_test_seq,
+            'y_test': y_test_seq,
+            'test_preds': test_preds,
+        }
+
+    def _train_lightgbm(self, data: Dict) -> Dict[str, Any]:
+        artifact_dir = str(Path(self.config.artifacts_dir) / "lightgbm")
+
+        lgbm_config = {
+            'objective': 'regression',
+            'metric': 'mae',
+            'boosting_type': 'gbdt',
+            'num_leaves': 63,
+            'learning_rate': 0.05,
+            'feature_fraction': 0.9,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 5,
+            'verbose': -1,
+            'random_state': 42,
+            'n_estimators': min(self.config.epochs * 5, 500),
+            'prediction_horizons': [1, 7, 30],
+            'early_stopping_rounds': 20,
+        }
+
+        model = LightGBMForecaster(config=lgbm_config, model_dir=artifact_dir)
+
+        # LightGBM needs 3D input (it flattens internally) and multi-horizon y
+        seq_len = self.config.sequence_length
+        horizons = [1, 7, 30]
+        max_h = max(horizons)
+
+        def build_lgbm_data(combined: np.ndarray):
+            """Build (X_3d, y_multi) for LightGBM from combined array."""
+            target = combined[:, 0]  # first col is close
+            features = combined[:, 1:]  # rest are features
+            n = len(target)
+            X_list, y_list = [], []
+            for i in range(seq_len, n - max_h):
+                X_list.append(features[i - seq_len:i])
+                y_row = [target[i + h] for h in horizons]
+                y_list.append(y_row)
+            return np.array(X_list), np.array(y_list)
+
+        X_train_lgb, y_train_lgb = build_lgbm_data(data['combined_train'])
+        X_val_lgb, y_val_lgb = build_lgbm_data(data['combined_val'])
+        X_test_lgb, y_test_lgb = build_lgbm_data(data['combined_test'])
+
+        t0 = time.time()
+        history = model.fit(X_train_lgb, y_train_lgb, validation_data=(X_val_lgb, y_val_lgb))
+        train_time = time.time() - t0
+
+        # Test predictions
+        test_preds = model.predict(X_test_lgb)
+
+        return {
+            'model': model,
+            'metrics': history,
+            'history': history,
+            'train_time': train_time,
+            'config': lgbm_config,
+            'X_test': X_test_lgb,
+            'y_test': y_test_lgb,
+            'test_preds': test_preds,
+        }
+
+    def _train_ensemble(self, data: Dict) -> Dict[str, Any]:
+        artifact_dir = str(Path(self.config.artifacts_dir) / "advanced_ensemble")
+
+        ensemble_config = {
+            'sequence_length': self.config.sequence_length,
+            'epochs': max(self.config.epochs // 2, 10),  # lighter for sub-models
+            'batch_size': self.config.batch_size,
+            'horizons': [1, 7, 30],
+        }
+
+        model = AdvancedEnsemble(config=ensemble_config, model_dir=artifact_dir)
+
+        price_history = data['y_train_raw']
+
+        t0 = time.time()
+        metrics = model.train(
+            X_train=data['X_train'],
+            y_train=data['y_train'],
+            X_val=data['X_val'],
+            y_val=data['y_val'],
+            feature_names=data['feature_names'],
+            price_history=price_history,
+        )
+        train_time = time.time() - t0
+
+        return {
+            'model': model,
+            'metrics': metrics,
+            'train_time': train_time,
+            'config': ensemble_config,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Visualization Generation
+# ---------------------------------------------------------------------------
+
+class TrainingVisualizer:
+    """Generates and saves all training plots as PNG files."""
+
+    def __init__(self, output_dir: Path, crypto: str):
+        self.output_dir = output_dir
+        self.crypto = crypto
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.generated_files: List[str] = []
+
+    def generate_all(self, results: Dict[str, Any], data: Dict[str, Any]):
+        """Generate all visualizations."""
+        logger.info(f"Generating visualizations in {self.output_dir}")
+
+        self._plot_loss_curves(results)
+        self._plot_metrics_progression(results)
+        self._plot_learning_rates(results)
+        self._plot_attention_heatmap(results, data)
+        self._plot_feature_importance(results)
+        self._plot_model_comparison(results)
+        self._plot_predictions_vs_actual(results)
+        self._plot_residual_analysis(results)
+        self._plot_ensemble_weights(results)
+        self._plot_training_summary(results)
+
+        logger.info(f"Generated {len(self.generated_files)} visualizations")
+        return self.generated_files
+
+    def _save(self, fig, name: str):
+        path = self.output_dir / name
+        fig.savefig(path, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+        self.generated_files.append(str(path))
+        logger.info(f"  Saved: {name}")
+
+    # -- 1. Loss Curves ------------------------------------------------------
+
+    def _plot_loss_curves(self, results: Dict):
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        fig.suptitle(f'{self.crypto} — Training & Validation Loss', fontsize=14, fontweight='bold')
+
+        for idx, (model_name, ax) in enumerate(zip(['lstm', 'transformer', 'lightgbm'], axes)):
+            if model_name not in results:
+                ax.set_visible(False)
+                continue
+
+            r = results[model_name]
+            h = r.get('history', {})
+
+            if model_name in ('lstm', 'transformer'):
+                loss = h.get('loss', [])
+                val_loss = h.get('val_loss', [])
+                if loss:
+                    epochs = range(1, len(loss) + 1)
+                    ax.plot(epochs, loss, label='Train Loss', linewidth=2)
+                if val_loss:
+                    ax.plot(epochs, val_loss, label='Val Loss', linewidth=2, linestyle='--')
+            else:
+                # LightGBM: history has train_mae / val_mae lists
+                train_mae = h.get('train_mae', [])
+                val_mae = h.get('val_mae', [])
+                if train_mae:
+                    ax.plot(range(1, len(train_mae) + 1), train_mae, label='Train MAE', linewidth=2)
+                if val_mae:
+                    ax.plot(range(1, len(val_mae) + 1), val_mae, label='Val MAE', linewidth=2, linestyle='--')
+
+            ax.set_title(model_name.upper())
+            ax.set_xlabel('Epoch / Round')
+            ax.set_ylabel('Loss / MAE')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        self._save(fig, 'loss_curves.png')
+
+    # -- 2. Metrics Progression ----------------------------------------------
+
+    def _plot_metrics_progression(self, results: Dict):
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        fig.suptitle(f'{self.crypto} — Metrics Progression', fontsize=14, fontweight='bold')
+
+        metric_pairs = [
+            ('mae', 'val_mae', 'MAE'),
+            ('mse', 'val_mse', 'MSE'),
+            ('output_1d_mae', 'val_output_1d_mae', '1-Day MAE'),
+            ('output_7d_mae', 'val_output_7d_mae', '7-Day MAE'),
+        ]
+
+        for ax, (train_key, val_key, title) in zip(axes.flat, metric_pairs):
+            has_data = False
+            for model_name in ('lstm', 'transformer'):
+                if model_name not in results:
+                    continue
+                h = results[model_name].get('history', {})
+                train_vals = h.get(train_key, [])
+                val_vals = h.get(val_key, [])
+                if train_vals:
+                    ax.plot(train_vals, label=f'{model_name} train', linewidth=1.5)
+                    has_data = True
+                if val_vals:
+                    ax.plot(val_vals, label=f'{model_name} val', linewidth=1.5, linestyle='--')
+                    has_data = True
+
+            ax.set_title(title)
+            ax.set_xlabel('Epoch')
+            if has_data:
+                ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        self._save(fig, 'metrics_progression.png')
+
+    # -- 3. Learning Rate Schedules ------------------------------------------
+
+    def _plot_learning_rates(self, results: Dict):
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.set_title(f'{self.crypto} — Learning Rate Schedules', fontsize=14, fontweight='bold')
+
+        for model_name in ('lstm', 'transformer'):
+            if model_name not in results:
+                continue
+            h = results[model_name].get('history', {})
+            lr = h.get('lr', [])
+            if lr:
+                ax.plot(range(1, len(lr) + 1), lr, label=model_name.upper(), linewidth=2)
+
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Learning Rate')
+        ax.set_yscale('log')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        self._save(fig, 'learning_rates.png')
+
+    # -- 4. Attention Heatmap ------------------------------------------------
+
+    def _plot_attention_heatmap(self, results: Dict, data: Dict):
+        if 'lstm' not in results:
+            return
+
+        lstm_model = results['lstm']['model']
+        X_test = results['lstm'].get('X_test')
+
+        if X_test is None or len(X_test) == 0:
+            return
+
+        try:
+            # Get attention weights from a sample
+            sample = X_test[:1]
+            attention_weights = lstm_model.analyze_attention_weights(sample)
+
+            if attention_weights is not None and hasattr(attention_weights, 'shape'):
+                fig, ax = plt.subplots(figsize=(12, 4))
+                if attention_weights.ndim == 1:
+                    ax.bar(range(len(attention_weights)), attention_weights, color='steelblue', alpha=0.8)
+                    ax.set_xlabel('Time Step')
+                    ax.set_ylabel('Attention Weight')
+                else:
+                    sns.heatmap(attention_weights, ax=ax, cmap='YlOrRd', cbar_kws={'label': 'Weight'})
+                    ax.set_xlabel('Time Step')
+                    ax.set_ylabel('Sample')
+
+                ax.set_title(f'{self.crypto} — LSTM Attention Weights', fontsize=14, fontweight='bold')
+                fig.tight_layout()
+                self._save(fig, 'attention_heatmap.png')
+        except Exception as e:
+            logger.warning(f"Could not generate attention heatmap: {e}")
+
+    # -- 5. Feature Importance -----------------------------------------------
+
+    def _plot_feature_importance(self, results: Dict):
+        if 'lightgbm' not in results:
+            return
+
+        lgbm_model = results['lightgbm']['model']
+
+        try:
+            importance = lgbm_model.get_feature_importance()
+            if not importance:
+                return
+
+            # Take top 30
+            sorted_imp = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:30]
+            names, values = zip(*sorted_imp)
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+            y_pos = range(len(names))
+            ax.barh(y_pos, values, color='steelblue', alpha=0.8)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(names, fontsize=8)
+            ax.invert_yaxis()
+            ax.set_xlabel('Importance')
+            ax.set_title(f'{self.crypto} — LightGBM Feature Importance (Top 30)',
+                         fontsize=14, fontweight='bold')
+            fig.tight_layout()
+            self._save(fig, 'feature_importance.png')
+        except Exception as e:
+            logger.warning(f"Could not generate feature importance plot: {e}")
+
+    # -- 6. Model Comparison -------------------------------------------------
+
+    def _plot_model_comparison(self, results: Dict):
+        """Bar chart comparing RMSE/MAE across models and horizons."""
+        horizons = ['1d', '7d', '30d']
+        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+
+        if not model_names:
+            return
+
+        # Collect test-set metrics per model per horizon
+        comparison = {m: {} for m in model_names}
+
+        for model_name in model_names:
+            r = results[model_name]
+            y_test = r.get('y_test', {})
+            test_preds = r.get('test_preds')
+
+            if test_preds is None:
+                continue
+
+            if isinstance(y_test, dict):
+                # Multi-output model (LSTM / Transformer)
+                pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
+                for i, h in enumerate(horizons):
+                    key = f'output_{h}'
+                    if key in y_test and i < len(pred_list):
+                        y_true = y_test[key]
+                        y_pred = pred_list[i].flatten()[:len(y_true)]
+                        comparison[model_name][h] = {
+                            'rmse': float(np.sqrt(mean_squared_error(y_true, y_pred))),
+                            'mae': float(mean_absolute_error(y_true, y_pred)),
+                        }
+            elif isinstance(y_test, np.ndarray) and y_test.ndim == 2:
+                # LightGBM multi-horizon
+                preds = test_preds if isinstance(test_preds, np.ndarray) else np.array(test_preds)
+                if preds.ndim == 1:
+                    preds = preds.reshape(-1, 1)
+                for i, h in enumerate(horizons):
+                    if i < y_test.shape[1] and i < preds.shape[1]:
+                        comparison[model_name][h] = {
+                            'rmse': float(np.sqrt(mean_squared_error(y_test[:, i], preds[:, i]))),
+                            'mae': float(mean_absolute_error(y_test[:, i], preds[:, i])),
+                        }
+
+        # Plot
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        fig.suptitle(f'{self.crypto} — Model Comparison', fontsize=14, fontweight='bold')
+
+        for ax, metric in zip(axes, ['rmse', 'mae']):
+            x = np.arange(len(horizons))
+            width = 0.25
+            for i, model_name in enumerate(model_names):
+                vals = [comparison[model_name].get(h, {}).get(metric, 0) for h in horizons]
+                ax.bar(x + i * width, vals, width, label=model_name.upper(), alpha=0.85)
+            ax.set_xticks(x + width)
+            ax.set_xticklabels(horizons)
+            ax.set_ylabel(metric.upper())
+            ax.set_title(metric.upper())
+            ax.legend()
+            ax.grid(True, alpha=0.3, axis='y')
+
+        fig.tight_layout()
+        self._save(fig, 'model_comparison.png')
+
+    # -- 7. Prediction vs Actual ---------------------------------------------
+
+    def _plot_predictions_vs_actual(self, results: Dict):
+        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+        n_models = len(model_names)
+        if n_models == 0:
+            return
+
+        fig, axes = plt.subplots(n_models, 3, figsize=(15, 5 * n_models))
+        if n_models == 1:
+            axes = axes.reshape(1, -1)
+
+        fig.suptitle(f'{self.crypto} — Predictions vs Actual', fontsize=14, fontweight='bold')
+        horizons = ['1d', '7d', '30d']
+
+        for row, model_name in enumerate(model_names):
+            r = results[model_name]
+            y_test = r.get('y_test')
+            test_preds = r.get('test_preds')
+            if test_preds is None:
+                continue
+
+            for col, h in enumerate(horizons):
+                ax = axes[row, col]
+                y_true, y_pred = self._extract_horizon(y_test, test_preds, h, col)
+
+                if y_true is not None and y_pred is not None:
+                    n = min(len(y_true), len(y_pred))
+                    y_true, y_pred = y_true[:n], y_pred[:n]
+                    ax.scatter(y_true, y_pred, alpha=0.3, s=10, color='steelblue')
+                    lims = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
+                    ax.plot(lims, lims, 'r--', linewidth=1, label='Perfect')
+                    r2 = r2_score(y_true, y_pred)
+                    ax.set_title(f'{model_name.upper()} {h} (R²={r2:.3f})', fontsize=10)
+                else:
+                    ax.set_title(f'{model_name.upper()} {h} (no data)')
+
+                ax.set_xlabel('Actual')
+                ax.set_ylabel('Predicted')
+                ax.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        self._save(fig, 'predictions_vs_actual.png')
+
+    def _extract_horizon(self, y_test, test_preds, horizon_label, idx):
+        """Extract (y_true, y_pred) for a given horizon from model outputs."""
+        if isinstance(y_test, dict):
+            key = f'output_{horizon_label}'
+            if key not in y_test:
+                return None, None
+            y_true = y_test[key]
+            pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
+            if idx < len(pred_list):
+                y_pred = pred_list[idx].flatten()
+            else:
+                return None, None
+        elif isinstance(y_test, np.ndarray) and y_test.ndim == 2:
+            if idx >= y_test.shape[1]:
+                return None, None
+            y_true = y_test[:, idx]
+            preds = test_preds if isinstance(test_preds, np.ndarray) else np.array(test_preds)
+            if preds.ndim == 1:
+                preds = preds.reshape(-1, 1)
+            if idx >= preds.shape[1]:
+                return None, None
+            y_pred = preds[:, idx]
+        else:
+            return None, None
+        return y_true, y_pred
+
+    # -- 8. Residual Analysis ------------------------------------------------
+
+    def _plot_residual_analysis(self, results: Dict):
+        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+        if not model_names:
+            return
+
+        fig, axes = plt.subplots(len(model_names), 2, figsize=(12, 5 * len(model_names)))
+        if len(model_names) == 1:
+            axes = axes.reshape(1, -1)
+
+        fig.suptitle(f'{self.crypto} — Residual Analysis (1-Day Horizon)',
+                     fontsize=14, fontweight='bold')
+
+        for row, model_name in enumerate(model_names):
+            r = results[model_name]
+            y_true, y_pred = self._extract_horizon(r.get('y_test'), r.get('test_preds'), '1d', 0)
+
+            if y_true is None or y_pred is None:
+                continue
+
+            n = min(len(y_true), len(y_pred))
+            residuals = y_true[:n] - y_pred[:n]
+
+            # Histogram
+            axes[row, 0].hist(residuals, bins=50, color='steelblue', alpha=0.7, edgecolor='white')
+            axes[row, 0].axvline(0, color='red', linestyle='--')
+            axes[row, 0].set_title(f'{model_name.upper()} — Residual Distribution')
+            axes[row, 0].set_xlabel('Residual')
+
+            # Residuals vs Predicted
+            axes[row, 1].scatter(y_pred[:n], residuals, alpha=0.3, s=10, color='steelblue')
+            axes[row, 1].axhline(0, color='red', linestyle='--')
+            axes[row, 1].set_title(f'{model_name.upper()} — Residuals vs Predicted')
+            axes[row, 1].set_xlabel('Predicted')
+            axes[row, 1].set_ylabel('Residual')
+
+        fig.tight_layout()
+        self._save(fig, 'residual_analysis.png')
+
+    # -- 9. Ensemble Weights -------------------------------------------------
+
+    def _plot_ensemble_weights(self, results: Dict):
+        if 'ensemble' not in results:
+            return
+
+        ensemble = results['ensemble']['model']
+        weights = getattr(ensemble, 'model_weights', None)
+
+        if weights is None or not isinstance(weights, dict):
+            return
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        names = list(weights.keys())
+        vals = list(weights.values())
+        colors = sns.color_palette("husl", len(names))
+
+        ax.bar(names, vals, color=colors, alpha=0.85, edgecolor='white', linewidth=1.5)
+        ax.set_ylabel('Weight')
+        ax.set_title(f'{self.crypto} — Ensemble Model Weights', fontsize=14, fontweight='bold')
+        ax.set_ylim(0, max(vals) * 1.2 if vals else 1)
+
+        for i, v in enumerate(vals):
+            ax.text(i, v + 0.01, f'{v:.3f}', ha='center', fontsize=11)
+
+        ax.grid(True, alpha=0.3, axis='y')
+        fig.tight_layout()
+        self._save(fig, 'ensemble_weights.png')
+
+    # -- 10. Training Summary ------------------------------------------------
+
+    def _plot_training_summary(self, results: Dict):
+        model_names = [m for m in ('lstm', 'transformer', 'lightgbm', 'ensemble') if m in results]
+        if not model_names:
+            return
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        fig.suptitle(f'{self.crypto} — Training Summary', fontsize=16, fontweight='bold')
+
+        # Panel 1: Training times
+        ax = axes[0, 0]
+        times = [results[m].get('train_time', 0) for m in model_names]
+        colors = sns.color_palette("husl", len(model_names))
+        ax.bar([m.upper() for m in model_names], times, color=colors, alpha=0.85)
+        ax.set_ylabel('Time (seconds)')
+        ax.set_title('Training Time')
+        for i, t in enumerate(times):
+            ax.text(i, t + 0.5, f'{t:.1f}s', ha='center', fontsize=9)
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # Panel 2: Final training loss (LSTM & Transformer)
+        ax = axes[0, 1]
+        for model_name in ('lstm', 'transformer'):
+            if model_name not in results:
+                continue
+            h = results[model_name].get('history', {})
+            loss = h.get('loss', [])
+            val_loss = h.get('val_loss', [])
+            if loss:
+                ax.plot(loss, label=f'{model_name} train', linewidth=1.5)
+            if val_loss:
+                ax.plot(val_loss, label=f'{model_name} val', linewidth=1.5, linestyle='--')
+        ax.set_title('Loss Convergence')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+        # Panel 3: 1-Day RMSE comparison
+        ax = axes[1, 0]
+        rmse_vals = []
+        rmse_names = []
+        for model_name in ('lstm', 'transformer', 'lightgbm'):
+            if model_name not in results:
+                continue
+            r = results[model_name]
+            y_true, y_pred = self._extract_horizon(r.get('y_test'), r.get('test_preds'), '1d', 0)
+            if y_true is not None and y_pred is not None:
+                n = min(len(y_true), len(y_pred))
+                rmse = np.sqrt(mean_squared_error(y_true[:n], y_pred[:n]))
+                rmse_vals.append(rmse)
+                rmse_names.append(model_name.upper())
+
+        if rmse_vals:
+            colors_bar = sns.color_palette("husl", len(rmse_names))
+            ax.bar(rmse_names, rmse_vals, color=colors_bar, alpha=0.85)
+            for i, v in enumerate(rmse_vals):
+                ax.text(i, v + 0.001, f'{v:.4f}', ha='center', fontsize=9)
+        ax.set_title('Test RMSE (1-Day)')
+        ax.set_ylabel('RMSE')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # Panel 4: Epochs trained
+        ax = axes[1, 1]
+        epoch_info = []
+        epoch_names = []
+        for model_name in ('lstm', 'transformer'):
+            if model_name not in results:
+                continue
+            h = results[model_name].get('history', {})
+            n_epochs = len(h.get('loss', []))
+            epoch_info.append(n_epochs)
+            epoch_names.append(model_name.upper())
+
+        if epoch_info:
+            colors_e = sns.color_palette("husl", len(epoch_names))
+            ax.bar(epoch_names, epoch_info, color=colors_e, alpha=0.85)
+            for i, v in enumerate(epoch_info):
+                ax.text(i, v + 0.5, str(v), ha='center', fontsize=11)
+        ax.set_title('Epochs Trained (early stopping)')
+        ax.set_ylabel('Epochs')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        fig.tight_layout()
+        self._save(fig, 'training_summary.png')
+
+
+# ---------------------------------------------------------------------------
+# Model Saving
+# ---------------------------------------------------------------------------
+
+def save_models(results: Dict[str, Any], config: TrainingConfig):
+    """Save all trained models to artifacts directory."""
+    logger.info("Saving models...")
+
+    if 'lstm' in results:
+        try:
+            results['lstm']['model'].save_model("production")
+            logger.info("  Saved LSTM model")
+        except Exception as e:
+            logger.warning(f"  Failed to save LSTM: {e}")
+
+    if 'transformer' in results:
+        try:
+            results['transformer']['model'].save_model("production")
+            logger.info("  Saved Transformer model")
+        except Exception as e:
+            logger.warning(f"  Failed to save Transformer: {e}")
+
+    if 'lightgbm' in results:
+        try:
+            lgbm_dir = Path(config.artifacts_dir) / "lightgbm"
+            results['lightgbm']['model'].save_model(str(lgbm_dir))
+            logger.info("  Saved LightGBM model")
+        except Exception as e:
+            logger.warning(f"  Failed to save LightGBM: {e}")
+
+    if 'ensemble' in results:
+        try:
+            results['ensemble']['model'].save_ensemble("production")
+            logger.info("  Saved Ensemble model")
+        except Exception as e:
+            logger.warning(f"  Failed to save Ensemble: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Training Report
+# ---------------------------------------------------------------------------
+
+def generate_report(results: Dict[str, Any], config: TrainingConfig, output_dir: Path):
+    """Generate a JSON training report."""
+    report = {
+        'crypto': config.crypto,
+        'timestamp': datetime.now().isoformat(),
+        'config': {
+            'sequence_length': config.sequence_length,
+            'epochs': config.epochs,
+            'batch_size': config.batch_size,
+            'max_features': config.max_features,
+            'train_ratio': config.train_ratio,
+            'val_ratio': config.val_ratio,
+        },
+        'models': {},
+    }
+
+    for model_name, r in results.items():
+        entry = {
+            'train_time_seconds': r.get('train_time', 0),
+        }
+        metrics = r.get('metrics', {})
+        if isinstance(metrics, dict):
+            entry['metrics'] = {k: v for k, v in metrics.items()
+                                if isinstance(v, (int, float, str))}
+        report['models'][model_name] = entry
+
+    report_path = output_dir / 'training_report.json'
+    with open(report_path, 'w') as f:
+        json.dump(report, f, indent=2, default=str)
+
+    logger.info(f"Training report saved: {report_path}")
+    return report
+
+
+# ---------------------------------------------------------------------------
+# MLflow Integration
+# ---------------------------------------------------------------------------
+
+def log_to_mlflow(results: Dict[str, Any], config: TrainingConfig, viz_files: List[str]):
+    """Log training run to MLflow."""
+    if not MLFLOW_AVAILABLE:
+        logger.info("MLflow not available, skipping logging")
+        return
+
+    try:
+        manager = create_experiment_manager(
+            experiment_name=f"production_{config.crypto}",
+            model_type="production_training",
+            description=f"Production training for {config.crypto}",
+            tracking_uri=f"file://{mlflow_dir}",
+        )
+
+        with manager.start_run(f"train_{config.crypto}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
+            manager.log_params_batch({
+                'crypto': config.crypto,
+                'sequence_length': config.sequence_length,
+                'epochs': config.epochs,
+                'batch_size': config.batch_size,
+                'max_features': config.max_features,
+            })
+
+            # Log per-model metrics
+            for model_name, r in results.items():
+                metrics = r.get('metrics', {})
+                if isinstance(metrics, dict):
+                    flat = {}
+                    for k, v in metrics.items():
+                        if isinstance(v, (int, float)):
+                            flat[f'{model_name}_{k}'] = v
+                    if flat:
+                        manager.log_metrics_batch(flat)
+
+                train_time = r.get('train_time', 0)
+                manager.log_metric(f'{model_name}_train_time', train_time)
+
+        logger.info("MLflow logging complete")
+    except Exception as e:
+        logger.warning(f"MLflow logging failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def train_single_crypto(config: TrainingConfig):
+    """Full training pipeline for a single cryptocurrency."""
+    logger.info(f"{'='*60}")
+    logger.info(f"  TRAINING: {config.crypto}")
+    logger.info(f"{'='*60}")
+
+    # 1. Load data
+    loader = ProductionDataLoader(config)
+    data = loader.load_and_prepare()
+
+    # 2. Train models
+    trainer = ProductionTrainer(config)
+    results = trainer.train_all(data)
+
+    # 3. Generate visualizations
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    viz_dir = Path(config.output_dir) / f"{config.crypto}_{timestamp}"
+    visualizer = TrainingVisualizer(viz_dir, config.crypto)
+    viz_files = visualizer.generate_all(results, data)
+
+    # 4. Save models
+    save_models(results, config)
+
+    # 5. Generate report
+    report = generate_report(results, config, viz_dir)
+
+    # 6. Log to MLflow
+    log_to_mlflow(results, config, viz_files)
+
+    logger.info(f"Training complete for {config.crypto}")
+    logger.info(f"Visualizations: {viz_dir}")
+    logger.info(f"Artifacts: {config.artifacts_dir}")
+
+    return results, viz_dir
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Production Crypto Model Training")
+    parser.add_argument("--crypto", type=str, default="BTC",
+                        help="Comma-separated crypto tickers (default: BTC)")
+    parser.add_argument("--epochs", type=int, default=100,
+                        help="Training epochs (default: 100)")
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--seq-length", type=int, default=60)
+    parser.add_argument("--max-features", type=int, default=50)
+    parser.add_argument("--no-ensemble", action="store_true",
+                        help="Skip ensemble training")
+    parser.add_argument("--output-dir", type=str,
+                        default=str(current_dir / "training_output"))
+    args = parser.parse_args()
+
+    cryptos = [c.strip().upper() for c in args.crypto.split(',')]
+
+    for crypto in cryptos:
+        config = TrainingConfig(
+            crypto=crypto,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            sequence_length=args.seq_length,
+            max_features=args.max_features,
+            train_ensemble=not args.no_ensemble,
+            output_dir=args.output_dir,
+        )
+
+        try:
+            results, viz_dir = train_single_crypto(config)
+            print(f"\n{'='*60}")
+            print(f"  {crypto} TRAINING COMPLETE")
+            print(f"  Plots saved to: {viz_dir}")
+            print(f"{'='*60}\n")
+        except Exception as e:
+            logger.error(f"Training failed for {crypto}: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

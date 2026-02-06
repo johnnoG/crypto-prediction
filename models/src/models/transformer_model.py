@@ -322,32 +322,37 @@ class TransformerForecaster:
             losses = {f'output_{h}d': 'huber' for h in self.config['multi_step']}
             loss_weights = {f'output_{h}d': 1.0/h for h in self.config['multi_step']}  # Weight shorter horizons more
 
+            per_output_metrics = {f'output_{h}d': ['mae', 'mse'] for h in self.config['multi_step']}
+
             model.compile(
                 optimizer=optimizer,
                 loss=losses,
                 loss_weights=loss_weights,
-                metrics=['mae', 'mse']
+                metrics=per_output_metrics
             )
 
         return model
 
     def _get_learning_rate_schedule(self):
-        """Learning rate schedule with warmup"""
-        def lr_schedule(step):
-            d_model = self.config['d_model']
-            warmup_steps = self.config['warmup_steps']
+        """Learning rate schedule with warmup (Transformer-style)"""
 
-            step = tf.cast(step, tf.float32)
-            warmup_steps = tf.cast(warmup_steps, tf.float32)
-            d_model = tf.cast(d_model, tf.float32)
+        class TransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
+            def __init__(self, d_model, warmup_steps):
+                super().__init__()
+                self.d_model = tf.cast(d_model, tf.float32)
+                self.warmup_steps = tf.cast(warmup_steps, tf.float32)
 
-            # Warmup then decay
-            arg1 = tf.math.rsqrt(step)
-            arg2 = step * (warmup_steps ** -1.5)
+            def __call__(self, step):
+                step = tf.cast(step + 1, tf.float32)  # avoid rsqrt(0)
+                arg1 = tf.math.rsqrt(step)
+                arg2 = step * (self.warmup_steps ** -1.5)
+                return tf.math.rsqrt(self.d_model) * tf.minimum(arg1, arg2)
 
-            return tf.math.rsqrt(d_model) * tf.minimum(arg1, arg2)
+            def get_config(self):
+                return {"d_model": float(self.d_model.numpy()),
+                        "warmup_steps": float(self.warmup_steps.numpy())}
 
-        return keras.optimizers.schedules.LambdaCallback(lr_schedule)
+        return TransformerSchedule(self.config['d_model'], self.config['warmup_steps'])
 
     def prepare_sequences(
         self,

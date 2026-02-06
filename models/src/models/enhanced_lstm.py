@@ -277,11 +277,13 @@ class EnhancedLSTMForecaster:
             # Weight shorter horizons more heavily
             loss_weights = {f'output_{h}d': 1.0 / np.sqrt(h) for h in self.config['multi_step']}
 
+            per_output_metrics = {f'output_{h}d': ['mae', 'mse'] for h in self.config['multi_step']}
+
             model.compile(
                 optimizer=optimizer,
                 loss=losses,
                 loss_weights=loss_weights,
-                metrics=['mae', 'mse']
+                metrics=per_output_metrics
             )
 
         return model

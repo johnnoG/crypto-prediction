@@ -17,7 +17,6 @@ import os
 import json
 import time
 import uuid
-import smtplib
 import threading
 import requests
 from enum import Enum
@@ -25,9 +24,16 @@ from typing import Dict, List, Optional, Any, Union, Callable
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
 import logging
+
+# Optional email imports
+try:
+    import smtplib
+    from email.mime.text import MimeText
+    from email.mime.multipart import MimeMultipart
+    EMAIL_AVAILABLE = True
+except ImportError:
+    EMAIL_AVAILABLE = False
 import psutil
 from concurrent.futures import ThreadPoolExecutor
 import warnings
@@ -542,6 +548,10 @@ class NotificationManager:
 
     def _send_email_notification(self, alert: Dict[str, Any]):
         """Send email notification"""
+        if not EMAIL_AVAILABLE:
+            logger.warning("Email functionality not available")
+            return
+
         # Email configuration from environment variables
         smtp_server = os.getenv('SMTP_SERVER')
         smtp_port = int(os.getenv('SMTP_PORT', '587'))

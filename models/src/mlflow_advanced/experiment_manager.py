@@ -87,7 +87,7 @@ class ExperimentConfig:
     description: str = ""
     tags: Dict[str, str] = None
     parent_run_id: Optional[str] = None
-    tracking_uri: str = "file://./mlruns"
+    tracking_uri: str = "file://./mlruns_local"
     auto_log: bool = True
     log_frequency: int = 10  # Log metrics every N steps
     artifact_location: Optional[str] = None
@@ -272,25 +272,31 @@ class AdvancedExperimentManager:
 
                 logger.info(f"Started run: {run_name} (ID: {run.info.run_id})")
 
-                yield self
+                try:
+                    yield self
+                finally:
+                    # Cleanup streaming while run is still active
+                    if self.metrics_streamer:
+                        self.metrics_streamer.stop_streaming()
+
+                    # Log run duration while the MLflow run is still open
+                    try:
+                        start_time = self.current_run.info.start_time
+                        if isinstance(start_time, str):
+                            start_datetime = datetime.datetime.fromisoformat(start_time)
+                        else:
+                            start_datetime = datetime.datetime.fromtimestamp(start_time / 1000.0)
+
+                        duration = (datetime.datetime.now() - start_datetime).total_seconds()
+                        self.log_metric("run_duration", duration)
+                    except Exception as e:
+                        logger.warning(f"Could not calculate run duration: {e}")
 
         except Exception as e:
             logger.error(f"Error in MLflow run: {e}")
             raise
 
         finally:
-            # Cleanup
-            if self.metrics_streamer:
-                self.metrics_streamer.stop_streaming()
-
-            # Log run completion
-            if self.current_run:
-                self.log_metric("run_duration",
-                               (datetime.datetime.now() -
-                                datetime.datetime.fromisoformat(
-                                    self.current_run.info.start_time
-                                )).total_seconds())
-
             self.current_run = None
             logger.info(f"Completed run: {run_name}")
 

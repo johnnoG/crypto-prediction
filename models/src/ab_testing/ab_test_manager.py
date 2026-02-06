@@ -385,7 +385,7 @@ class ABTestManager:
 
     def __init__(self, mlflow_tracking_uri: str = "file://./mlruns"):
         self.tracking_uri = mlflow_tracking_uri
-        self.client = MlflowClient(tracking_uri) if MLFLOW_AVAILABLE else None
+        self.client = MlflowClient(self.tracking_uri) if MLFLOW_AVAILABLE else None
         self.active_tests = {}
         self.test_history = {}
         self.bayesian_tester = BayesianABTesting()

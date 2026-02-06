@@ -326,28 +326,30 @@ class TransformerForecaster:
                 optimizer=optimizer,
                 loss=losses,
                 loss_weights=loss_weights,
-                metrics=['mae', 'mse']
             )
 
         return model
 
     def _get_learning_rate_schedule(self):
-        """Learning rate schedule with warmup"""
-        def lr_schedule(step):
-            d_model = self.config['d_model']
-            warmup_steps = self.config['warmup_steps']
+        """Learning rate schedule with warmup (Transformer-style)"""
 
-            step = tf.cast(step, tf.float32)
-            warmup_steps = tf.cast(warmup_steps, tf.float32)
-            d_model = tf.cast(d_model, tf.float32)
+        class TransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
+            def __init__(self, d_model, warmup_steps):
+                super().__init__()
+                self.d_model = tf.cast(d_model, tf.float32)
+                self.warmup_steps = tf.cast(warmup_steps, tf.float32)
 
-            # Warmup then decay
-            arg1 = tf.math.rsqrt(step)
-            arg2 = step * (warmup_steps ** -1.5)
+            def __call__(self, step):
+                step = tf.cast(step + 1, tf.float32)  # avoid rsqrt(0)
+                arg1 = tf.math.rsqrt(step)
+                arg2 = step * (self.warmup_steps ** -1.5)
+                return tf.math.rsqrt(self.d_model) * tf.minimum(arg1, arg2)
 
-            return tf.math.rsqrt(d_model) * tf.minimum(arg1, arg2)
+            def get_config(self):
+                return {"d_model": float(self.d_model.numpy()),
+                        "warmup_steps": float(self.warmup_steps.numpy())}
 
-        return keras.optimizers.schedules.LambdaCallback(lr_schedule)
+        return TransformerSchedule(self.config['d_model'], self.config['warmup_steps'])
 
     def prepare_sequences(
         self,
@@ -443,12 +445,26 @@ class TransformerForecaster:
                 verbose=1
             ),
             callbacks.ModelCheckpoint(
-                filepath=str(self.model_dir / 'best_model.h5'),
+                filepath=str(self.model_dir / 'best_model.weights.h5'),
                 monitor='val_loss' if X_val is not None else 'loss',
                 save_best_only=True,
-                save_weights_only=False
+                save_weights_only=True
             )
         ]
+
+        # Per-batch progress logging
+        class _BatchProgress(callbacks.Callback):
+            def on_epoch_begin(self, epoch, logs=None):
+                self._epoch = epoch
+                self._t0 = __import__('time').time()
+                self._steps = self.params.get('steps', '?')
+            def on_batch_end(self, batch, logs=None):
+                if batch > 0 and batch % 20 == 0:
+                    loss = logs.get('loss', 0)
+                    elapsed = __import__('time').time() - self._t0
+                    print(f"  [Transformer] Epoch {self._epoch+1} | batch {batch}/{self._steps} | "
+                          f"loss: {loss:.4f} | {elapsed:.0f}s", flush=True)
+        callback_list.append(_BatchProgress())
 
         # Prepare validation data
         validation_data = (X_val, y_val) if X_val is not None else None

@@ -1,358 +1,335 @@
 # Crypto Prediction & Real-Time Dashboard
 
-Production-ready cryptocurrency price prediction system with machine learning capabilities, real-time data processing, user authentication, and interactive dashboard.
+Production-grade cryptocurrency price prediction system combining deep learning, gradient boosting, and ensemble methods with a real-time trading dashboard. Trained on 104 cryptocurrencies with 150+ engineered features.
 
 ## Overview
 
-A complete end-to-end solution for cryptocurrency price prediction featuring:
+An end-to-end ML pipeline and web application for multi-horizon cryptocurrency price forecasting:
 
-- **Advanced Data Analysis** - Comprehensive analysis of 104 cryptocurrencies with 150+ engineered features
-- **FastAPI Backend** - RESTful API with authentication, real-time crypto data, and ML forecasting
-- **PostgreSQL Database** - Persistent storage for user data, market data, and predictions
-- **Redis Cache** - High-performance caching layer for frequently accessed crypto prices
-- **React Dashboard** - Interactive frontend with real-time charts and user authentication
-- **Machine Learning Pipeline** - LSTM/Transformer models for price prediction with MLflow tracking
-- **User Authentication** - Secure signup/signin with Argon2 password hashing and JWT tokens
-- **Real-time Crypto Data** - Live price feeds from CoinGecko with rate limiting and caching
-- **Docker Infrastructure** - Fully containerized deployment with Docker Compose
+- **Three Model Architectures** — Bidirectional LSTM with attention, Transformer with causal masking, and LightGBM gradient boosting, combined through an intelligent ensemble with market regime detection
+- **150+ Engineered Features** — Technical indicators, momentum oscillators, volatility metrics, volume analysis, and statistical features for 104 cryptocurrencies
+- **Production Training Pipeline** — Automated training with chronological splits, RobustScaler preprocessing, multi-step forecasting (1/7/30 day horizons), and 10 diagnostic visualizations per training run
+- **MLflow Experiment Tracking** — Full experiment logging with model versioning, metric tracking, and artifact management
+- **FastAPI Backend** — RESTful API with JWT authentication, real-time crypto data from CoinGecko/Binance, WebSocket streaming, and ML inference endpoints
+- **React Dashboard** — Interactive frontend with live price charts, forecast panels, news aggregation, portfolio tracking, and alert management
+- **Docker Infrastructure** — Containerized deployment with PostgreSQL, Redis, and Nginx
 
 ## Quick Start
 
 ```bash
-# Clone the repository
+# Clone and start all services
 git clone <repository-url>
 cd crypto-prediction
-
-# Start all services (backend, frontend, database, cache)
 docker-compose up -d
 
-# Database is automatically initialized with migrations
 # Access the application:
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
-# API Documentation: http://localhost:8000/docs
+#   Frontend:  http://localhost:3000
+#   API:       http://localhost:8000
+#   API Docs:  http://localhost:8000/docs
 ```
 
-The application will be ready in about 1-2 minutes. You can create an account and start exploring real-time crypto prices immediately!
+### Train Models (Google Colab with GPU recommended)
+
+```bash
+# Full production training for BTC and ETH
+python models/src/train_production.py --crypto BTC,ETH
+
+# Quick validation run
+python models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
+
+# Custom configuration
+python models/src/train_production.py --crypto BTC,ETH,SOL --epochs 200 --batch-size 64
+```
+
+Training outputs:
+- Model weights saved to `models/artifacts/`
+- 10 diagnostic PNG plots saved to `models/src/training_output/`
+- JSON training report with all metrics
+- MLflow experiment logs
 
 ## Repository Structure
 
-```text
-/ (root)
-├── backend/                   # FastAPI backend service
+```
+crypto-prediction/
+├── backend/                          # FastAPI backend service
 │   ├── app/
-│   │   ├── main.py           # Application entry point
-│   │   ├── config.py         # Configuration management
-│   │   ├── db.py             # Database connection & ORM
-│   │   ├── cache.py          # Redis cache manager
-│   │   ├── api/              # API endpoints
-│   │   ├── clients/          # External API clients
-│   │   ├── services/         # Forecasting, ETL, caching, health
-│   │   ├── models/           # SQLAlchemy models
-│   │   └── utils/            # Connection pooling, circuit breaker
-│   ├── migrations/           # Database migrations
-│   ├── tests/                # Test suite (subset)
-│   ├── requirements.txt      # Python dependencies
-│   ├── Dockerfile
-│   └── README.md
+│   │   ├── main.py                   # Application entry point
+│   │   ├── api/                      # REST endpoints (auth, crypto, forecasts, health, ...)
+│   │   ├── clients/                  # External API clients (CoinGecko, Binance, news)
+│   │   ├── services/                 # Business logic (forecasting, ETL, caching)
+│   │   ├── models/                   # SQLAlchemy ORM models
+│   │   └── utils/                    # Connection pooling, circuit breaker
+│   ├── migrations/                   # Alembic database migrations
+│   └── tests/
 │
-├── data_analysis/             # Comprehensive crypto analysis
-│   ├── crypto_data_analyzer.py     # Main data analysis engine
-│   ├── feature_engineering.py  # 150+ technical indicators
-│   └── statistical_analysis.py     # Advanced statistical analysis
+├── models/                           # ML models, training, and deployment
+│   ├── MODEL_ARCHITECTURE_AND_TRAINING.md  # Detailed model documentation
+│   ├── artifacts/                    # Saved model weights and metadata
+│   │   ├── enhanced_lstm/
+│   │   ├── transformer/
+│   │   ├── lightgbm/
+│   │   └── advanced_ensemble/
+│   └── src/
+│       ├── models/                   # Model implementations
+│       │   ├── enhanced_lstm.py      # Bidirectional LSTM + attention + residual
+│       │   ├── transformer_model.py  # Multi-head self-attention transformer
+│       │   ├── lightgbm_model.py     # Gradient boosting forecaster
+│       │   └── advanced_ensemble.py  # Ensemble with regime detection
+│       ├── training/                 # Training infrastructure
+│       │   ├── hyperopt_pipeline.py  # Optuna hyperparameter optimization
+│       │   ├── production_pipeline.py # End-to-end training pipeline
+│       │   └── mlflow_integration.py # MLflow experiment tracking
+│       ├── pipelines/
+│       │   └── enhanced_training_pipeline.py  # Walk-forward validation
+│       ├── deployment/
+│       │   └── deployment_manager.py # Blue-green deployment with rollback
+│       ├── ab_testing/
+│       │   └── ab_test_manager.py    # Champion-challenger A/B testing
+│       ├── monitoring/
+│       │   └── performance_monitor.py # Drift detection and alerting
+│       ├── mlflow_advanced/
+│       │   └── experiment_manager.py # Advanced MLflow management
+│       ├── visualization/            # Training dashboards and plots
+│       │   ├── training_dashboard.py
+│       │   ├── training_monitor.py
+│       │   ├── hyperopt_dashboard.py
+│       │   ├── model_inspector.py
+│       │   └── launch_dashboards.py
+│       ├── train_production.py       # Main production training script
+│       └── phase3_integration.py     # MLflow + deployment integration demo
 │
-├── data/                      # Data storage & processing
-│   ├── features/             # Engineered feature datasets (104 cryptos)
-│   ├── processed/            # Cleaned and processed data
-│   ├── kaggle-raw/           # Raw Kaggle cryptocurrency dataset
-│   ├── raw/demo/             # Sample parquet data
-│   └── sources/              # Data source configs and tests
+├── data/
+│   ├── features/                     # Engineered feature parquets (104 cryptos)
+│   ├── processed/                    # Cleaned OHLCV data (CSV + Parquet)
+│   ├── kaggle-raw/                   # Original Kaggle dataset
+│   └── sources/                      # Data source configs
 │
-├── notebooks/                 # Interactive analysis notebooks
-│   └── comprehensive_crypto_analysis.ipynb  # Main analysis notebook
+├── data_analysis/                    # Analysis engine
+│   ├── crypto_data_analyzer.py       # Main data analysis pipeline
+│   ├── feature_engineering.py        # 150+ technical indicators
+│   └── statistical_analysis.py       # PCA, clustering, risk metrics
 │
-├── analysis_results/         # Generated analysis outputs
-│   ├── *.xlsx               # Statistical summaries and correlations
-│   ├── *.csv                # Risk metrics and cluster assignments
-│   ├── *.png                # Professional visualizations
-│   └── *.json               # Analysis metadata
+├── frontend/                         # React 19 + TypeScript dashboard
+│   └── src/
+│       ├── components/               # UI components (charts, auth, pages)
+│       ├── contexts/                 # Auth state management
+│       ├── hooks/                    # Data fetching hooks
+│       └── lib/                      # API client, utilities
 │
-├── models/                    # ML training, configs, artifacts
-│   ├── artifacts/            # Stored model binaries
-│   ├── configs/              # Model configuration
-│   └── src/                  # Model training code
-│
-├── frontend/                  # React dashboard
-│   ├── src/
-│   ├── public/
-│   └── Dockerfile
-│
-├── docs/                      # Documentation
-│   └── reference/            # Reference docs and summaries
-│
-├── assets/                    # Binary assets
-├── tests/                     # Root-level tests
-│
-├── .github/                   # GitHub workflows & templates
-│   └── workflows/
-│
-├── docker-compose.yml         # Multi-container orchestration
+├── notebooks/                        # Jupyter analysis notebooks
+├── docs/                             # Reference documentation
+├── docker-compose.yml
+├── requirements.txt                  # Python dependencies (122 packages)
 └── README.md
 ```
 
-## Documentation
+## Machine Learning Pipeline
 
-- [Analysis Documentation](ANALYSIS_DOCUMENTATION.md) - Complete guide to understanding all analysis outputs and metrics
-- [Quick Reference](docs/reference/QUICK_REFERENCE.md) - Getting started and key commands
-- [Backend API Documentation](backend/README.md) - Detailed API documentation
-- [Implementation Summary](docs/reference/IMPLEMENTATION_SUMMARY.md) - Architecture and feature overview
+### Architecture Overview
+
+```
+Raw Parquet Data (5600+ rows, 150+ features per crypto)
+    |
+    v
+Data Cleaning --> Feature Selection (top 60 by correlation)
+    |
+    v
+RobustScaler (fit on train only)
+    |
+    v
+Chronological Split: 70% train / 15% val / 15% test
+    |
+    v
+Sliding Window Sequences (60 days lookback)
+    |
+    v
++------------------+--------------------+------------------+
+|   Enhanced LSTM  |    Transformer     |    LightGBM      |
+| Bidirectional    | Multi-head         | Gradient boosted  |
+| Attention + Res  | Self-attention     | Decision trees   |
+| [256, 128, 64]   | d=256, 8 heads     | 1000 estimators  |
++------------------+--------------------+------------------+
+    |                    |                    |
+    v                    v                    v
++--------------------------------------------------------+
+|            Advanced Ensemble                            |
+|  Market regime detection + Meta-learner + Online adapt  |
++--------------------------------------------------------+
+    |
+    v
+Multi-Horizon Predictions: 1-day, 7-day, 30-day
+    |
+    v
+Visualizations (10 PNG plots) + Model Artifacts + MLflow Logs
+```
+
+For detailed model documentation including architecture diagrams, hyperparameter rationale, and training methodology, see [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md).
+
+### Training Visualizations
+
+Each training run generates 10 diagnostic plots:
+
+| Plot | Description |
+|------|-------------|
+| `loss_curves.png` | Train vs validation loss for each model |
+| `metrics_progression.png` | MAE/MSE per horizon over training |
+| `learning_rates.png` | LR schedules (warmup, decay, plateau) |
+| `attention_heatmap.png` | LSTM attention weights over timesteps |
+| `feature_importance.png` | Top 30 LightGBM features |
+| `model_comparison.png` | RMSE/MAE bars across all models |
+| `predictions_vs_actual.png` | Scatter plots with R-squared |
+| `residual_analysis.png` | Residual distributions |
+| `ensemble_weights.png` | Model contribution weights |
+| `training_summary.png` | Multi-panel overview |
 
 ## Technology Stack
 
+### Machine Learning
+
+| Component | Technology |
+|-----------|------------|
+| Deep Learning | TensorFlow/Keras (LSTM, Transformer) |
+| Gradient Boosting | LightGBM, XGBoost |
+| Hyperparameter Tuning | Optuna (Bayesian optimization) |
+| Experiment Tracking | MLflow (logging, model registry) |
+| Feature Engineering | Pandas, NumPy, TA-Lib, Statsmodels |
+| Preprocessing | Scikit-learn (RobustScaler, metrics) |
+| Interpretability | SHAP |
+| Visualization | Matplotlib, Seaborn, Plotly, Dash |
+
 ### Backend
 
-- **FastAPI** - Modern Python web framework with automatic API documentation
-- **SQLAlchemy** - ORM for database operations with async support
-- **Alembic** - Database migration management
-- **Pydantic** - Data validation and settings management
-- **Argon2** - Secure password hashing (industry standard)
-- **PyJWT** - JWT token generation and validation
-- **Redis-py** - Redis client for caching and rate limiting
-- **Slowapi** - Rate limiting middleware for FastAPI
-- **HTTPX** - Modern HTTP client for external API calls
-
-### Database & Caching
-
-- **PostgreSQL 16** - Primary data store with Alpine Linux base
-- **Redis 7** - High-performance caching and session storage
-
-### Data Processing & ML
-
-- **NumPy & Pandas** - Data manipulation and analysis
-- **Polars** - Fast DataFrame library for large datasets
-- **Statsmodels** - Statistical modeling and time series analysis
-- **Scikit-learn** - Machine learning algorithms and preprocessing
-- **TensorFlow/Keras** - Deep learning models (LSTM/Transformer)
-- **LightGBM/XGBoost** - Gradient boosting for ensemble models
-- **MLflow** - Experiment tracking and model versioning
-- **SHAP** - Model interpretability and feature importance
-- **Plotly & Seaborn** - Advanced visualizations and statistical plots
-- **TA-Lib** - Technical analysis indicators library
-- **Feedparser** - RSS feed parsing for crypto news
-- **BeautifulSoup4** - Web scraping for additional data sources
+| Component | Technology |
+|-----------|------------|
+| Framework | FastAPI with async support |
+| Database | PostgreSQL 16 + SQLAlchemy + Alembic |
+| Cache | Redis 7 |
+| Auth | Argon2 password hashing + JWT tokens |
+| HTTP Client | HTTPX (async) |
+| Rate Limiting | SlowAPI |
+| External APIs | CoinGecko, Binance, CryptoCompare |
 
 ### Frontend
 
-- **React 19** - Modern UI framework with concurrent features
-- **TypeScript** - Type-safe JavaScript development
-- **Vite** - Fast build tool and development server
-- **Tailwind CSS** - Utility-first CSS framework
-- **React Query** - Powerful data synchronization for React
-- **Lightweight Charts** - Performant financial charting library
-- **Lucide React** - Beautiful icon library
+| Component | Technology |
+|-----------|------------|
+| Framework | React 19 + TypeScript |
+| Build Tool | Vite |
+| Styling | Tailwind CSS |
+| Data Fetching | React Query |
+| Charts | Lightweight Charts (TradingView) |
+| Icons | Lucide React |
 
-### DevOps & Infrastructure
+### Infrastructure
 
-- **Docker** - Containerization with multi-stage builds
-- **Docker Compose** - Multi-container orchestration
-- **Nginx** - Web server and reverse proxy for frontend
-- **GitHub Actions** - CI/CD pipelines
+| Component | Technology |
+|-----------|------------|
+| Containerization | Docker + Docker Compose |
+| Web Server | Nginx (reverse proxy) |
+| CI/CD | GitHub Actions |
+| Monitoring | Prometheus, Sentry |
 
-## Features
+## Data
 
-### ✅ Implemented Features
+The system processes data for 104 cryptocurrencies spanning 2010-2026:
 
-**Phase 1: Comprehensive Data Analysis (COMPLETED)**
-
-- Complete analysis of 104 cryptocurrencies spanning 15+ years (2010-2026)
-- Advanced feature engineering with 150+ technical indicators across 6 categories
-- Statistical analysis including correlation matrices, PCA, and clustering
-- Risk-return analysis with comprehensive metrics (Sharpe, Sortino, Calmar ratios)
-- Time series decomposition and trend analysis
-- Professional visualizations and interactive plots
-- Comprehensive documentation for presentation and analysis interpretation
-
-**Backend Infrastructure:**
-
-- PostgreSQL database with optimized schema and migrations
-- Redis caching layer with TTL management and rate limiting
-- FastAPI server with comprehensive API endpoints
-- Health check endpoints with database and cache monitoring
-- Docker containerization with multi-stage builds
-
-**Authentication & Security:**
-
-- User registration and login with secure Argon2 password hashing
-- JWT token-based authentication with access and refresh tokens
-- Support for strong passwords from password managers (256+ characters)
-- Secure session management and token validation
-
-**Real-time Crypto Data:**
-
-- Live cryptocurrency price feeds from CoinGecko API
-- Intelligent rate limiting and caching to respect API limits
-- Support for 30+ major cryptocurrencies in the UI (BTC, ETH, SOL, etc.)
-- Error handling and graceful degradation
-
-**Frontend Application:**
-
-- React 19 dashboard with TypeScript and Tailwind CSS
-- User authentication flow with signup/signin forms
-- Real-time crypto price displays and charts
-- Responsive design with modern UI components
-- Integration with backend API using React Query
-- Advanced charting and technical indicators in the UI
-
-### 🚧 Phase 2: Machine Learning Pipeline (IN PROGRESS)
-
-- [x] Feature engineering pipeline with 150+ indicators
-- [x] Statistical analysis and data preprocessing
-- [ ] LSTM/Transformer model implementation
-- [ ] MLflow integration for experiment tracking
-- [ ] Model training and validation pipeline
-- [ ] Production model serving and inference
-
-### 🚧 Additional In Progress Features
-
-- [ ] WebSocket streaming integrated into UI (backend WS/SSE exists; hook present)
-- [ ] Portfolio tracking and management (backend integration pending)
-- [ ] Advanced analytics dashboard with real-time insights
-
-### 📋 Planned Features
-
-- [ ] Ensemble model combining multiple architectures
-- [ ] Advanced backtesting and strategy evaluation
-- [ ] Real-time model monitoring and alerting
-- [ ] Mobile-responsive PWA capabilities
-- [ ] Automated testing and CI/CD pipelines
-- [ ] Production deployment on cloud platforms
-
-## Database Schema
-
-### Cryptocurrencies
-
-Stores metadata about tracked cryptocurrencies (BTC, ETH, etc.)
-
-### Market Data
-
-OHLCV (Open, High, Low, Close, Volume) time-series data with indexes for performance.
-
-### Predictions
-
-Model predictions with confidence scores, actual prices, and error metrics.
-
-For detailed schema documentation, see [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md).
+- **Raw Data**: Historical OHLCV from Kaggle and exchange APIs
+- **Processed Data**: Cleaned and normalized time series (CSV + Parquet)
+- **Feature Data**: 150+ engineered features per cryptocurrency including:
+  - Price-derived (returns, momentum, spreads)
+  - Moving averages (SMA/EMA at multiple periods, MACD)
+  - Momentum oscillators (RSI, Stochastic, Williams %R)
+  - Volatility (Bollinger Bands, ATR, Keltner Channels)
+  - Volume indicators (OBV, VPT, volume ratios)
+  - Statistical (skewness, kurtosis, z-scores)
+  - Time-based (cyclical day/month/quarter encoding)
+  - Regime detection (bull/bear, volatility regimes)
 
 ## Development
 
 ### Prerequisites
 
+- Python 3.11+ with pip
+- Node.js 18+
 - Docker & Docker Compose
-- Python 3.11+
-- Node.js 18+ (for frontend)
+- GPU recommended for model training (Google Colab T4/A100 works well)
 
-### Setup Development Environment
+### Local Setup
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd crypto-prediction
-
-# Start services
-docker-compose up -d
-
-# Backend development
+# Backend
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Frontend development
+# Frontend
 cd frontend
-npm install
-npm start
+npm install && npm run dev
+
+# ML environment
+pip install -r requirements.txt  # Root requirements.txt
+
+# Start infrastructure
+docker-compose up -d  # PostgreSQL + Redis
 ```
 
 ### Running Tests
 
 ```bash
-# Backend tests
-docker-compose exec backend pytest
-
-# With coverage
 docker-compose exec backend pytest --cov=app --cov-report=html
 ```
 
 ### Database Migrations
 
 ```bash
-# Create migration
-docker-compose exec backend alembic revision --autogenerate -m "Description"
-
-# Apply migrations
+docker-compose exec backend alembic revision --autogenerate -m "description"
 docker-compose exec backend alembic upgrade head
-
-# Rollback
-docker-compose exec backend alembic downgrade -1
 ```
 
 ## API Endpoints
 
-### Health Checks
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | System health check |
+| `GET /health/detailed` | Database + cache + service health |
+| `POST /auth/signup` | User registration |
+| `POST /auth/signin` | JWT authentication |
+| `GET /api/crypto/prices` | Live cryptocurrency prices |
+| `GET /api/forecasts/{symbol}` | ML price forecasts |
+| `GET /api/market/overview` | Market summary |
+| `WS /api/stream` | Real-time price WebSocket |
 
-- `GET /health` - Basic health check
-- `GET /health/db` - Database connectivity
-- `GET /health/cache` - Redis cache status
-- `GET /health/detailed` - Comprehensive system health
-
-### Interactive Documentation
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 
 ## Project Status
 
-**✅ PHASE 1 COMPLETED - Comprehensive Data Analysis**
+### Completed
 
-Phase 1 is fully completed with:
+- **Phase 1: Data Analysis** — 104 cryptocurrencies analyzed, 150+ features engineered, statistical analysis (PCA, clustering, risk metrics), professional visualizations
+- **Phase 2: ML Models** — LSTM, Transformer, LightGBM, and Ensemble models fully implemented with multi-step forecasting, attention mechanisms, and uncertainty quantification
+- **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
+- **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
 
-- [x] Complete analysis of 104 cryptocurrencies (2010-2026)
-- [x] Advanced feature engineering with 150+ technical indicators
-- [x] Statistical analysis including correlation matrices and PCA
-- [x] Risk-return analysis with professional visualizations
-- [x] Time series decomposition and trend analysis
-- [x] Comprehensive documentation for presentation
-- [x] Interactive Jupyter notebook for exploration
+### In Progress
 
-**✅ INFRASTRUCTURE COMPLETED - Production-Ready Application**
+- Production model training on GPU (BTC, ETH, then expanding to more coins)
+- WebSocket streaming integration in frontend
+- Advanced analytics dashboard with live predictions
 
-The application infrastructure is fully functional with:
+### Planned
 
-- [x] Complete Docker infrastructure with 4-service stack
-- [x] PostgreSQL database with user authentication tables
-- [x] Redis caching for performance optimization
-- [x] FastAPI backend with comprehensive API endpoints
-- [x] React frontend with modern UI and real-time updates
-- [x] User authentication system with Argon2 security
-- [x] Live cryptocurrency price feeds from CoinGecko
-- [x] Rate limiting and error handling
-- [x] Database migrations and health monitoring
+- Real-time model serving with FastAPI inference endpoint
+- Portfolio optimization with trained models
+- Automated retraining pipeline with drift detection
+- Mobile-responsive PWA
+- Cloud deployment (AWS/GCP)
 
-**🚧 PHASE 2 IN PROGRESS - Machine Learning Pipeline**
+## Documentation
 
-- [ ] LSTM/Transformer model implementation
-- [ ] MLflow integration for experiment tracking
-- [ ] Production training pipeline with automation
-- [ ] Advanced analytics dashboard
-- [ ] Model performance monitoring and evaluation
-
-**📋 FUTURE PHASES - Advanced Features**
-
-- [ ] Real-time prediction serving
-- [ ] Advanced portfolio optimization
-- [ ] WebSocket streaming for live updates
-- [ ] Mobile PWA capabilities
-- [ ] Production deployment automation
+- [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) — Detailed documentation of all model architectures, hyperparameters, training methodology, and ensemble strategy
+- [Analysis Documentation](ANALYSIS_DOCUMENTATION.md) — Guide to analysis outputs and metrics
+- [Backend API](backend/README.md) — API endpoint documentation
+- [Quick Reference](docs/reference/QUICK_REFERENCE.md) — Getting started guide
 
 ## Acknowledgments
 

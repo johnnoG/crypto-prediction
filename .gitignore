@@ -75,7 +75,24 @@ htmlcov/
 .claude
 
 # data
-data/
+data/kaggle-extracted/
+data/processed/
+data/features/
 
 # analysis results
 ANALYSIS_DOCUMENTATION.md
+analysis_results/
+data_analysis/plots/
+data_analysis/*.json
+
+# MLflow
+mlruns*/
+mlflow.db
+
+# Training output
+training_output/
+models/artifacts/**/*.h5
+models/artifacts/**/*.txt
+models/artifacts/**/*.pkl
+models/artifacts/**/*.json
+!models/artifacts/.gitkeep

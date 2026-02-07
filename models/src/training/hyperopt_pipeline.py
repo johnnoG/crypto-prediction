@@ -22,13 +22,19 @@ import warnings
 
 try:
     import optuna
-    from optuna.integration import MLflowCallback
     from optuna.pruners import MedianPruner, SuccessiveHalvingPruner
     from optuna.samplers import TPESampler, CmaEsSampler
     OPTUNA_AVAILABLE = True
 except ImportError:
     OPTUNA_AVAILABLE = False
     print("Warning: Optuna not installed. Install with: pip install optuna")
+
+# MLflowCallback moved to optuna-integration in optuna 4.x
+try:
+    from optuna.integration import MLflowCallback
+    OPTUNA_MLFLOW_AVAILABLE = True
+except ImportError:
+    OPTUNA_MLFLOW_AVAILABLE = False
 
 try:
     import mlflow
@@ -526,11 +532,12 @@ class HyperparameterOptimizer:
                 }
             )
 
-            mlflow_callback = MLflowCallback(
-                tracking_uri=self.mlflow_tracker.tracking_uri,
-                metric_name=optimization_metric
-            )
-            callbacks.append(mlflow_callback)
+            if OPTUNA_MLFLOW_AVAILABLE:
+                mlflow_callback = MLflowCallback(
+                    tracking_uri=self.mlflow_tracker.tracking_uri,
+                    metric_name=optimization_metric
+                )
+                callbacks.append(mlflow_callback)
 
         try:
             # Run optimization

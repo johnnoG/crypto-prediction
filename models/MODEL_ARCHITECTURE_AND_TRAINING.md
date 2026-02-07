@@ -31,15 +31,15 @@ Input (60 timesteps x 61 features)
   |
   LayerNormalization
   |
-  Bidirectional LSTM (256 units) + Dropout (0.25)
+  Bidirectional LSTM (128 units) + Dropout (0.4)
   |
-  Residual LSTM (128 units) + LayerNorm + Dropout (0.25)
+  Residual LSTM (64 units) + LayerNorm + Dropout (0.4)
   |
-  Residual LSTM (64 units) + LayerNorm
+  Residual LSTM (32 units) + LayerNorm
   |
   Attention Layer (learnable weights over all 60 timesteps)
   |
-  Dense (128) -> LayerNorm -> Dropout -> Dense (64) -> LayerNorm -> Dropout
+  Dense (64) -> LayerNorm -> Dropout -> Dense (32) -> LayerNorm -> Dropout
   |              |              |
   Head 1d        Head 7d        Head 30d   (multi-step output)
 ```
@@ -50,7 +50,7 @@ Input (60 timesteps x 61 features)
 - **Residual connections**: Each `ResidualLSTMCell` wraps a standard LSTM with a linear projection skip-connection and layer normalization. This prevents gradient vanishing in the three-layer stack and allows the model to learn incremental refinements rather than complete transformations at each layer.
 - **Attention mechanism**: After the LSTM stack, a Bahdanau-style attention layer computes learned weights over all 60 timesteps. This lets the model focus on the most predictive time points (e.g., a sudden volume spike 12 days ago or a support level test 45 days ago) rather than relying solely on the final hidden state.
 - **Multi-step heads**: Separate output heads for 1-day, 7-day, and 30-day horizons. Shorter horizons receive higher loss weights (`1/sqrt(h)`) because near-term predictions are more actionable and more feasible.
-- **Recurrent dropout (0.15)**: Applied within the LSTM recurrence at each timestep, providing stronger regularization than standard dropout alone. Requires GPU (CuDNN) for acceptable training speed.
+- **Recurrent dropout (0.2)**: Applied within the LSTM recurrence at each timestep, providing stronger regularization than standard dropout alone. Requires GPU (CuDNN) for acceptable training speed.
 - **Monte Carlo dropout**: At inference time, dropout remains active across 100 forward passes. The variance of predictions provides a calibrated uncertainty estimate without requiring a separate model.
 
 ### Hyperparameters (Production)
@@ -58,11 +58,11 @@ Input (60 timesteps x 61 features)
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
 | Sequence length | 60 | ~2 months of daily data; captures medium-term patterns |
-| LSTM units | [256, 128, 64] | Three-layer stack with tapering width forces hierarchical feature compression |
-| Dense units | [128, 64] | Two dense layers before output heads for non-linear feature combination |
-| Dropout | 0.25 | Moderately aggressive regularization for noisy financial data |
-| Recurrent dropout | 0.15 | Per-timestep regularization within LSTM recurrence |
-| Learning rate | 0.001 | Standard Adam with ReduceLROnPlateau (factor=0.5, patience=8) |
+| LSTM units | [128, 64, 32] | Three-layer stack with tapering width; reduced from [256,128,64] to combat overfitting on ~3700 training samples |
+| Dense units | [64, 32] | Two dense layers before output heads for non-linear feature combination |
+| Dropout | 0.4 | Aggressive regularization for noisy financial data with limited samples |
+| Recurrent dropout | 0.2 | Per-timestep regularization within LSTM recurrence |
+| Learning rate | 0.0005 | Adam with early stopping; lower LR for more stable convergence |
 | Gradient clipping | 1.0 | Prevents exploding gradients common in financial time series |
 | Batch size | 64 | Larger batches for GPU utilization and gradient stability |
 | Epochs | 150 | With early stopping (patience=20) typically converges in 40-80 epochs |
@@ -87,15 +87,15 @@ Transformers process the entire input sequence in parallel through self-attentio
 ```
 Input (60 timesteps x 61 features)
   |
-  Dense Projection -> d_model (256)
+  Dense Projection -> d_model (128)
   |
   Positional Encoding (learnable)
-  |  Dropout (0.1)
+  |  Dropout (0.25)
   |
-  Transformer Block x4:
-  |   Multi-Head Self-Attention (8 heads, causal mask)
+  Transformer Block x3:
+  |   Multi-Head Self-Attention (4 heads, causal mask)
   |   Residual Add & LayerNorm
-  |   Feed-Forward Network (1024 -> GELU -> 256)
+  |   Feed-Forward Network (512 -> GELU -> 128)
   |   Residual Add & LayerNorm
   |
   Global Average Pooling
@@ -109,7 +109,7 @@ Input (60 timesteps x 61 features)
 
 - **Causal masking**: The self-attention uses a lower-triangular mask so that each timestep can only attend to itself and earlier timesteps. This prevents information leakage from the future during training.
 - **Learnable positional encoding**: Unlike fixed sinusoidal encoding, learnable embeddings allow the model to discover that "3 days before a prediction" has different significance than "45 days before."
-- **Warmup learning rate schedule**: The standard Transformer schedule (`1/sqrt(d_model) * min(1/sqrt(step), step * warmup^{-1.5})`) starts with a very low rate, ramps up during 1000 warmup steps, then decays. This is critical because the attention weights are initially random and large gradients early on can destabilize training.
+- **Warmup learning rate schedule**: The standard Transformer schedule (`1/sqrt(d_model) * min(1/sqrt(step), step * warmup^{-1.5})`) starts with a very low rate, ramps up during 500 warmup steps, then decays. This is critical because the attention weights are initially random and large gradients early on can destabilize training.
 - **GELU activation**: Used in the feed-forward network instead of ReLU. GELU provides smoother gradients which helps with the attention mechanism's sensitivity.
 - **Huber loss per horizon**: Less sensitive to outliers than MSE, which matters because crypto prices occasionally have extreme moves that would otherwise dominate the gradient.
 
@@ -117,12 +117,12 @@ Input (60 timesteps x 61 features)
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| d_model | 256 | Balanced capacity for ~5K sample dataset; 256/8 = 32 dims per attention head |
-| Attention heads | 8 | Multi-scale pattern learning; each head sees 32-dimensional projections |
-| Feed-forward dim | 1024 | 4x d_model (standard ratio from "Attention Is All You Need") |
-| Transformer layers | 4 | Deep enough for hierarchical temporal patterns without overfitting |
-| Warmup steps | 1000 | ~30 epochs of warmup at batch_size=64 before full learning rate |
-| Dropout | 0.1 | Light regularization; early stopping handles overfitting |
+| d_model | 128 | Reduced from 256 to combat overfitting on ~3700 training samples; 128/4 = 32 dims per head |
+| Attention heads | 4 | Multi-scale pattern learning; each head sees 32-dimensional projections |
+| Feed-forward dim | 512 | 4x d_model (standard ratio from "Attention Is All You Need") |
+| Transformer layers | 3 | Reduced from 4; fewer layers prevent overfitting on limited data |
+| Warmup steps | 500 | Faster warmup for smaller model; reaches peak LR sooner |
+| Dropout | 0.25 | Increased from 0.1; stronger regularization needed for small dataset |
 | Optimizer | AdamW | Weight decay (0.01) provides additional regularization vs standard Adam |
 | Batch size | 64 | Larger batches for GPU utilization |
 | Epochs | 150 | With early stopping (patience=15) typically converges in 30-60 epochs |
@@ -307,12 +307,32 @@ python models/src/train_production.py --crypto BTC,ETH
 # Quick test run (3 epochs, skip ensemble)
 python models/src/train_production.py --crypto BTC --epochs 3 --no-ensemble
 
-# Custom configuration
-python models/src/train_production.py --crypto BTC,ETH,SOL --epochs 200 --batch-size 64 --seq-length 30
+# With Optuna hyperparameter tuning
+python models/src/train_production.py --crypto BTC --tune --tune-trials 20
+
+# Tune LightGBM only (fast) + walk-forward validation
+python models/src/train_production.py --crypto BTC --tune --tune-models lightgbm --walk-forward
+
+# Full professional pipeline
+python models/src/train_production.py --crypto BTC --tune --walk-forward --epochs 150
 
 # All available options
 python models/src/train_production.py --help
 ```
+
+### Advanced Pipeline Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--tune` | Run Optuna Bayesian hyperparameter optimization before training | Off |
+| `--tune-trials N` | Number of Optuna trials per model | 20 |
+| `--tune-timeout N` | Max seconds for tuning per model | 3600 |
+| `--tune-models STR` | Comma-separated models to tune | lstm,transformer,lightgbm |
+| `--walk-forward` | Walk-forward cross-validation after training | Off |
+| `--wf-splits N` | Number of walk-forward splits | 5 |
+| `--no-uncertainty` | Disable Monte Carlo dropout uncertainty quantification | On |
+| `--mc-samples N` | MC dropout samples for confidence intervals | 50 |
+| `--no-advanced-mlflow` | Disable interactive MLflow curves and model cards | On |
 
 ### Output Structure
 

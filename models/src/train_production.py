@@ -4,10 +4,24 @@ Production Training Script for Cryptocurrency Price Prediction
 Trains LSTM, Transformer, LightGBM, and Ensemble models on real feature data,
 generates rich matplotlib visualizations, saves models, and logs to MLflow.
 
+Advanced features (behind optional flags):
+  --tune              Optuna Bayesian hyperparameter optimization before training
+  --walk-forward      Walk-forward cross-validation after training
+  --no-uncertainty    Disable Monte Carlo dropout uncertainty quantification
+  --no-advanced-mlflow  Disable interactive MLflow training curves & model cards
+
 Usage:
+    # Standard training
     python models/src/train_production.py --crypto BTC,ETH
-    python models/src/train_production.py --crypto BTC --epochs 5
-    python models/src/train_production.py --crypto BTC --no-ensemble
+
+    # Quick test run
+    python models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
+
+    # Full professional pipeline with hyperparameter tuning
+    python models/src/train_production.py --crypto BTC --tune --tune-trials 20 --walk-forward
+
+    # Tune LightGBM only (fast)
+    python models/src/train_production.py --crypto BTC --tune --tune-trials 10 --tune-models lightgbm
 """
 
 import os
@@ -59,6 +73,20 @@ from models.enhanced_lstm import EnhancedLSTMForecaster
 from models.transformer_model import TransformerForecaster
 from models.lightgbm_model import LightGBMForecaster
 from models.advanced_ensemble import AdvancedEnsemble
+
+# Hyperparameter optimization (optional — requires optuna)
+try:
+    from training.hyperopt_pipeline import HyperparameterOptimizer
+    HYPEROPT_AVAILABLE = True
+except ImportError:
+    HYPEROPT_AVAILABLE = False
+
+# Walk-forward validation (optional)
+try:
+    from pipelines.enhanced_training_pipeline import WalkForwardValidator, ValidationConfig
+    WALKFORWARD_AVAILABLE = True
+except ImportError:
+    WALKFORWARD_AVAILABLE = False
 
 import tensorflow as tf
 
@@ -127,6 +155,25 @@ class TrainingConfig:
     # Output
     output_dir: str = str(current_dir / "training_output")
     artifacts_dir: str = str(current_dir.parent / "artifacts")
+
+    # Hyperparameter tuning (--tune)
+    tune: bool = False
+    tune_trials: int = 20
+    tune_timeout: int = 3600
+    tune_models: str = "lstm,transformer,lightgbm"
+
+    # Walk-forward validation (--walk-forward)
+    walk_forward: bool = False
+    wf_n_splits: int = 5
+    wf_min_train_size: int = 1000
+    wf_expanding: bool = True
+
+    # Uncertainty quantification (on by default)
+    uncertainty: bool = True
+    mc_samples: int = 50
+
+    # Advanced MLflow (on by default)
+    advanced_mlflow: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -244,8 +291,9 @@ class ProductionDataLoader:
 class ProductionTrainer:
     """Trains all models and collects results."""
 
-    def __init__(self, config: TrainingConfig):
+    def __init__(self, config: TrainingConfig, tuned_configs: Optional[Dict] = None):
         self.config = config
+        self.tuned_configs = tuned_configs or {}
         self.results: Dict[str, Any] = {}
 
     def train_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -287,11 +335,11 @@ class ProductionTrainer:
         lstm_config = {
             'sequence_length': seq_len,
             'n_features': data['combined_train'].shape[1],
-            'lstm_units': [256, 128, 64],
-            'dense_units': [128, 64],
-            'dropout_rate': 0.25,
-            'recurrent_dropout': 0.15,
-            'learning_rate': 0.001,
+            'lstm_units': [128, 64, 32],        # smaller to reduce overfitting
+            'dense_units': [64, 32],             # smaller dense head
+            'dropout_rate': 0.4,                 # higher dropout (was 0.25)
+            'recurrent_dropout': 0.2,            # higher recurrent dropout (was 0.15)
+            'learning_rate': 0.0005,             # lower initial LR (was 0.001)
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
             'early_stopping_patience': 20,
@@ -304,6 +352,16 @@ class ProductionTrainer:
             'teacher_forcing_ratio': 0.5,
             'mc_samples': 100,
         }
+
+        # Apply tuned hyperparameters if available
+        if 'lstm' in self.tuned_configs:
+            tuned = self.tuned_configs['lstm']
+            for key in ('lstm_units', 'dense_units', 'dropout_rate', 'recurrent_dropout',
+                        'learning_rate', 'use_bidirectional', 'use_attention',
+                        'use_residual', 'gradient_clip', 'batch_size'):
+                if key in tuned:
+                    lstm_config[key] = tuned[key]
+            logger.info(f"  Applied tuned hyperparameters for LSTM: {list(tuned.keys())}")
 
         model = EnhancedLSTMForecaster(config=lstm_config, model_dir=artifact_dir)
 
@@ -340,19 +398,28 @@ class ProductionTrainer:
         transformer_config = {
             'sequence_length': seq_len,
             'n_features': data['combined_train'].shape[1],
-            'd_model': 256,
-            'num_heads': 8,
-            'ff_dim': 1024,
-            'num_layers': 4,
-            'dropout_rate': 0.1,
+            'd_model': 128,                      # smaller (was 256) — less overfitting
+            'num_heads': 4,                      # match d_model reduction (was 8)
+            'ff_dim': 512,                       # smaller (was 1024)
+            'num_layers': 3,                     # fewer layers (was 4)
+            'dropout_rate': 0.25,                # higher dropout (was 0.1)
             'learning_rate': 0.0001,
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
             'early_stopping_patience': 15,
-            'warmup_steps': 1000,
+            'warmup_steps': 500,                 # faster warmup (was 1000) for ~115 steps/epoch
             'multi_step': [1, 7, 30],
             'use_causal_mask': True,
         }
+
+        # Apply tuned hyperparameters if available
+        if 'transformer' in self.tuned_configs:
+            tuned = self.tuned_configs['transformer']
+            for key in ('d_model', 'num_heads', 'ff_dim', 'num_layers', 'dropout_rate',
+                        'learning_rate', 'warmup_steps', 'batch_size'):
+                if key in tuned:
+                    transformer_config[key] = tuned[key]
+            logger.info(f"  Applied tuned hyperparameters for Transformer: {list(tuned.keys())}")
 
         model = TransformerForecaster(config=transformer_config, model_dir=artifact_dir)
 
@@ -402,6 +469,16 @@ class ProductionTrainer:
             'early_stopping_rounds': 50,
         }
 
+        # Apply tuned hyperparameters if available
+        if 'lightgbm' in self.tuned_configs:
+            tuned = self.tuned_configs['lightgbm']
+            for key in ('num_leaves', 'learning_rate', 'feature_fraction', 'bagging_fraction',
+                        'min_child_samples', 'reg_alpha', 'reg_lambda', 'max_depth',
+                        'n_estimators', 'bagging_freq'):
+                if key in tuned:
+                    lgbm_config[key] = tuned[key]
+            logger.info(f"  Applied tuned hyperparameters for LightGBM: {list(tuned.keys())}")
+
         model = LightGBMForecaster(config=lgbm_config, model_dir=artifact_dir)
 
         # LightGBM needs 3D input (it flattens internally) and multi-horizon y
@@ -446,12 +523,14 @@ class ProductionTrainer:
     def _train_ensemble(self, data: Dict) -> Dict[str, Any]:
         artifact_dir = str(Path(self.config.artifacts_dir) / "advanced_ensemble")
 
-        ensemble_config = {
+        # Start from ensemble defaults, then override with our settings
+        ensemble_config = AdvancedEnsemble._default_config()
+        ensemble_config.update({
             'sequence_length': self.config.sequence_length,
             'epochs': max(self.config.epochs // 2, 10),  # lighter for sub-models
             'batch_size': self.config.batch_size,
             'horizons': [1, 7, 30],
-        }
+        })
 
         model = AdvancedEnsemble(config=ensemble_config, model_dir=artifact_dir)
 
@@ -474,6 +553,246 @@ class ProductionTrainer:
             'train_time': train_time,
             'config': ensemble_config,
         }
+
+
+# ---------------------------------------------------------------------------
+# Hyperparameter Tuning
+# ---------------------------------------------------------------------------
+
+def run_hyperparameter_tuning(
+    config: TrainingConfig,
+    data: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    """Run Optuna hyperparameter optimization for selected models.
+
+    Returns dict mapping model_type -> best_params.
+    """
+    if not HYPEROPT_AVAILABLE:
+        logger.warning("Hyperopt not available (optuna not installed). Skipping tuning.")
+        logger.warning("Install with: pip install optuna")
+        return {}
+
+    logger.info("=" * 60)
+    logger.info("  HYPERPARAMETER OPTIMIZATION")
+    logger.info(f"  Trials per model: {config.tune_trials}")
+    logger.info(f"  Timeout per model: {config.tune_timeout}s")
+    logger.info("=" * 60)
+
+    optimizer = HyperparameterOptimizer(
+        study_name=f"tune_{config.crypto}",
+    )
+
+    # Build sequenced data for the optimizer (LSTM/Transformer need sequences)
+    # The optimizer's ObjectiveFunction handles this internally via model.prepare_sequences()
+    # But it expects flat X, y arrays — pass the combined train/val arrays
+    models_to_tune = [m.strip().lower() for m in config.tune_models.split(',')]
+    tuned_configs = {}
+    tuning_results = {}
+
+    for model_type in models_to_tune:
+        logger.info(f"\n  Tuning {model_type} ({config.tune_trials} trials)...")
+        try:
+            result = optimizer.optimize_model(
+                model_type=model_type,
+                X_train=data['X_train'],
+                y_train=data['y_train'],
+                X_val=data['X_val'],
+                y_val=data['y_val'],
+                n_trials=config.tune_trials,
+                timeout=config.tune_timeout,
+                feature_names=data['feature_names'],
+                optimization_metric="rmse",
+                cv_folds=3,
+            )
+            if result and 'best_params' in result:
+                tuned_configs[model_type] = result['best_params']
+                tuning_results[model_type] = {
+                    'best_value': result.get('best_value'),
+                    'best_trial': result.get('best_trial'),
+                    'n_trials': result.get('n_trials'),
+                }
+                logger.info(f"  Best {model_type} RMSE: {result.get('best_value', 'N/A'):.4f}")
+                logger.info(f"  Best params: {result['best_params']}")
+        except Exception as e:
+            logger.warning(f"  Tuning failed for {model_type}: {e}")
+
+    logger.info(f"\n  Tuning complete. Tuned models: {list(tuned_configs.keys())}")
+    return tuned_configs
+
+
+# ---------------------------------------------------------------------------
+# Walk-Forward Validation
+# ---------------------------------------------------------------------------
+
+def run_walk_forward_validation(
+    config: TrainingConfig,
+    data: Dict[str, Any],
+    results: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    """Run walk-forward cross-validation on trained models.
+
+    Returns dict mapping model_name -> {metric: [fold_scores]}.
+    """
+    if not WALKFORWARD_AVAILABLE:
+        logger.warning("Walk-forward validation not available. Skipping.")
+        return {}
+
+    logger.info("=" * 60)
+    logger.info("  WALK-FORWARD VALIDATION")
+    logger.info(f"  Splits: {config.wf_n_splits}, Expanding: {config.wf_expanding}")
+    logger.info("=" * 60)
+
+    val_config = ValidationConfig(
+        min_train_size=config.wf_min_train_size,
+        validation_size=200,
+        step_size=100,
+        expanding_window=config.wf_expanding,
+    )
+    validator = WalkForwardValidator(val_config)
+
+    # Combine all scaled data back for walk-forward splits
+    X_all = np.vstack([data['X_train'], data['X_val'], data['X_test']])
+    y_all = np.concatenate([data['y_train'], data['y_val'], data['y_test']])
+
+    wf_results = {}
+
+    for model_name in ('lstm', 'transformer', 'lightgbm'):
+        if model_name not in results:
+            continue
+
+        model = results[model_name]['model']
+        logger.info(f"\n  Walk-forward validation for {model_name}...")
+
+        try:
+            fold_scores = validator.validate_model(
+                model, X_all, y_all, data['feature_names']
+            )
+            wf_results[model_name] = fold_scores
+
+            for metric in ('rmse', 'mae', 'r2'):
+                if metric in fold_scores and fold_scores[metric]:
+                    mean_val = np.mean(fold_scores[metric])
+                    std_val = np.std(fold_scores[metric])
+                    logger.info(f"    {model_name} {metric}: {mean_val:.4f} +/- {std_val:.4f}")
+        except Exception as e:
+            logger.warning(f"    Walk-forward failed for {model_name}: {e}")
+
+    return wf_results
+
+
+# ---------------------------------------------------------------------------
+# Uncertainty Quantification
+# ---------------------------------------------------------------------------
+
+def run_uncertainty_quantification(
+    results: Dict[str, Any],
+    data: Dict[str, Any],
+    config: TrainingConfig,
+) -> Dict[str, Dict[str, Any]]:
+    """Run MC dropout / predict_proba for confidence intervals.
+
+    Returns dict mapping model_name -> uncertainty metrics.
+    """
+    logger.info("=" * 60)
+    logger.info("  UNCERTAINTY QUANTIFICATION")
+    logger.info(f"  MC samples: {config.mc_samples}")
+    logger.info("=" * 60)
+
+    uq_results = {}
+
+    # LSTM and Transformer: Monte Carlo dropout
+    for model_name in ('lstm', 'transformer'):
+        if model_name not in results:
+            continue
+
+        model = results[model_name]['model']
+        X_test = results[model_name]['X_test']
+
+        try:
+            preds, confidence = model.predict(
+                X_test, return_confidence=True, num_simulations=config.mc_samples
+            )
+
+            # Compute mean CI width from first horizon
+            if isinstance(confidence, dict):
+                first_key = list(confidence.keys())[0]
+                ci = confidence[first_key]
+            elif isinstance(confidence, list):
+                ci = confidence[0]
+            else:
+                ci = confidence
+
+            width = ci[:, 1] - ci[:, 0]
+            mean_width = float(np.mean(width))
+
+            uq_results[model_name] = {
+                'mean_ci_width': mean_width,
+                'median_ci_width': float(np.median(width)),
+                'mc_samples': config.mc_samples,
+            }
+            logger.info(f"  {model_name}: mean 95%% CI width = {mean_width:.4f}")
+        except Exception as e:
+            logger.warning(f"  Uncertainty failed for {model_name}: {e}")
+
+    # LightGBM: predict_proba uncertainty
+    if 'lightgbm' in results:
+        model = results['lightgbm']['model']
+        X_test = results['lightgbm']['X_test']
+
+        try:
+            preds, uncertainties = model.predict_proba(X_test)
+            mean_unc = float(np.mean(uncertainties))
+            uq_results['lightgbm'] = {
+                'mean_uncertainty': mean_unc,
+                'median_uncertainty': float(np.median(uncertainties)),
+            }
+            logger.info(f"  lightgbm: mean uncertainty = {mean_unc:.4f}")
+        except Exception as e:
+            logger.warning(f"  Uncertainty failed for lightgbm: {e}")
+
+    return uq_results
+
+
+# ---------------------------------------------------------------------------
+# Ensemble Evaluation
+# ---------------------------------------------------------------------------
+
+def run_ensemble_evaluation(
+    results: Dict[str, Any],
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Comprehensive ensemble evaluation with per-model metrics."""
+    if 'ensemble' not in results:
+        return {}
+
+    logger.info("=" * 60)
+    logger.info("  ENSEMBLE EVALUATION")
+    logger.info("=" * 60)
+
+    ensemble_model = results['ensemble']['model']
+
+    try:
+        eval_metrics = ensemble_model.evaluate_ensemble(
+            X_test=data['X_test'],
+            y_test=data['y_test'],
+            price_history=data['y_test_raw'],
+        )
+
+        # Log ensemble weights
+        weights = getattr(ensemble_model, 'model_weights', {})
+        logger.info(f"  Final ensemble weights: {weights}")
+
+        if 'improvement_pct' in eval_metrics:
+            logger.info(f"  Ensemble improvement over best individual: "
+                        f"{eval_metrics['improvement_pct']:.2f}%")
+
+        return {
+            'metrics': eval_metrics,
+            'weights': {k: float(v) for k, v in weights.items()} if weights else {},
+        }
+    except Exception as e:
+        logger.warning(f"  Ensemble evaluation failed: {e}")
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -1012,11 +1331,25 @@ def save_models(results: Dict[str, Any], config: TrainingConfig):
 # Training Report
 # ---------------------------------------------------------------------------
 
-def generate_report(results: Dict[str, Any], config: TrainingConfig, output_dir: Path):
-    """Generate a JSON training report."""
+def generate_report(
+    results: Dict[str, Any],
+    config: TrainingConfig,
+    output_dir: Path,
+    uq_results: Optional[Dict] = None,
+    wf_results: Optional[Dict] = None,
+    ensemble_eval: Optional[Dict] = None,
+    tuning_results: Optional[Dict] = None,
+):
+    """Generate a comprehensive JSON training report."""
     report = {
         'crypto': config.crypto,
         'timestamp': datetime.now().isoformat(),
+        'pipeline_flags': {
+            'tune': config.tune,
+            'walk_forward': config.walk_forward,
+            'uncertainty': config.uncertainty,
+            'advanced_mlflow': config.advanced_mlflow,
+        },
         'config': {
             'sequence_length': config.sequence_length,
             'epochs': config.epochs,
@@ -1038,6 +1371,44 @@ def generate_report(results: Dict[str, Any], config: TrainingConfig, output_dir:
                                 if isinstance(v, (int, float, str))}
         report['models'][model_name] = entry
 
+    # Hyperparameter tuning results
+    if tuning_results:
+        report['hyperparameter_tuning'] = {}
+        for model_name, info in tuning_results.items():
+            report['hyperparameter_tuning'][model_name] = {
+                k: v for k, v in info.items() if isinstance(v, (int, float, str))
+            }
+
+    # Uncertainty analysis
+    if uq_results:
+        report['uncertainty_analysis'] = {}
+        for model_name, uq in uq_results.items():
+            report['uncertainty_analysis'][model_name] = {
+                k: v for k, v in uq.items() if isinstance(v, (int, float, str))
+            }
+
+    # Walk-forward validation
+    if wf_results:
+        report['walk_forward_validation'] = {}
+        for model_name, scores in wf_results.items():
+            report['walk_forward_validation'][model_name] = {
+                metric: {
+                    'mean': float(np.mean(values)),
+                    'std': float(np.std(values)),
+                    'n_folds': len(values),
+                }
+                for metric, values in scores.items()
+                if isinstance(values, list) and len(values) > 0
+            }
+
+    # Ensemble evaluation
+    if ensemble_eval and 'metrics' in ensemble_eval:
+        report['ensemble_evaluation'] = {
+            'metrics': {k: float(v) if isinstance(v, (int, float)) else v
+                        for k, v in ensemble_eval['metrics'].items()},
+            'weights': ensemble_eval.get('weights', {}),
+        }
+
     report_path = output_dir / 'training_report.json'
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=2, default=str)
@@ -1050,8 +1421,16 @@ def generate_report(results: Dict[str, Any], config: TrainingConfig, output_dir:
 # MLflow Integration
 # ---------------------------------------------------------------------------
 
-def log_to_mlflow(results: Dict[str, Any], config: TrainingConfig, viz_files: List[str]):
-    """Log training run to MLflow."""
+def log_to_mlflow(
+    results: Dict[str, Any],
+    config: TrainingConfig,
+    viz_files: List[str],
+    uq_results: Optional[Dict] = None,
+    wf_results: Optional[Dict] = None,
+    ensemble_eval: Optional[Dict] = None,
+    tuning_results: Optional[Dict] = None,
+):
+    """Log training run to MLflow with advanced features."""
     if not MLFLOW_AVAILABLE:
         logger.info("MLflow not available, skipping logging")
         return
@@ -1064,16 +1443,21 @@ def log_to_mlflow(results: Dict[str, Any], config: TrainingConfig, viz_files: Li
             tracking_uri=f"file://{mlflow_dir}",
         )
 
-        with manager.start_run(f"train_{config.crypto}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
+        run_name = f"train_{config.crypto}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        with manager.start_run(run_name):
+            # Standard params
             manager.log_params_batch({
                 'crypto': config.crypto,
                 'sequence_length': config.sequence_length,
                 'epochs': config.epochs,
                 'batch_size': config.batch_size,
                 'max_features': config.max_features,
+                'tune_enabled': config.tune,
+                'walk_forward_enabled': config.walk_forward,
+                'uncertainty_enabled': config.uncertainty,
             })
 
-            # Log per-model metrics
+            # Per-model metrics and training times
             for model_name, r in results.items():
                 metrics = r.get('metrics', {})
                 if isinstance(metrics, dict):
@@ -1086,6 +1470,94 @@ def log_to_mlflow(results: Dict[str, Any], config: TrainingConfig, viz_files: Li
 
                 train_time = r.get('train_time', 0)
                 manager.log_metric(f'{model_name}_train_time', train_time)
+
+            # Advanced MLflow features
+            if config.advanced_mlflow:
+                # Interactive training curves
+                for model_name in ('lstm', 'transformer'):
+                    if model_name in results:
+                        history = results[model_name].get('history', {})
+                        if history and hasattr(manager, 'log_training_curves'):
+                            try:
+                                manager.log_training_curves(
+                                    history,
+                                    title=f"{config.crypto} {model_name.upper()} Training",
+                                )
+                            except Exception as e:
+                                logger.debug(f"Training curves logging failed: {e}")
+
+                # Feature importance (LightGBM)
+                if 'lightgbm' in results and hasattr(manager, 'log_feature_importance'):
+                    try:
+                        lgbm = results['lightgbm']['model']
+                        importance = lgbm.get_feature_importance()
+                        if importance:
+                            first_horizon = list(importance.values())[0]
+                            if isinstance(first_horizon, dict):
+                                names = list(first_horizon.keys())[:30]
+                                values = list(first_horizon.values())[:30]
+                                manager.log_feature_importance(
+                                    names, values,
+                                    title=f"{config.crypto} LightGBM Feature Importance",
+                                )
+                    except Exception as e:
+                        logger.debug(f"Feature importance logging failed: {e}")
+
+                # Model card
+                if hasattr(manager, 'create_model_card'):
+                    try:
+                        model_info = {
+                            'name': f"{config.crypto} Production Ensemble",
+                            'description': f"Multi-model ensemble for {config.crypto} price prediction",
+                            'dataset': f"{config.crypto}_features.parquet",
+                            'architecture': 'LSTM + Transformer + LightGBM + Ensemble',
+                            'training_time': sum(
+                                r.get('train_time', 0) for r in results.values()
+                            ),
+                            'metrics': {},
+                        }
+                        for mn, r in results.items():
+                            m = r.get('metrics', {})
+                            if isinstance(m, dict):
+                                for k, v in m.items():
+                                    if isinstance(v, (int, float)):
+                                        model_info['metrics'][f'{mn}_{k}'] = v
+                        manager.create_model_card(model_info)
+                    except Exception as e:
+                        logger.debug(f"Model card creation failed: {e}")
+
+            # Uncertainty results
+            if uq_results:
+                for model_name, uq in uq_results.items():
+                    for k, v in uq.items():
+                        if isinstance(v, (int, float)):
+                            manager.log_metric(f'{model_name}_uq_{k}', v)
+
+            # Walk-forward results
+            if wf_results:
+                for model_name, scores in wf_results.items():
+                    for metric, values in scores.items():
+                        if isinstance(values, list) and len(values) > 0:
+                            manager.log_metric(
+                                f'wf_{model_name}_{metric}_mean', float(np.mean(values))
+                            )
+                            manager.log_metric(
+                                f'wf_{model_name}_{metric}_std', float(np.std(values))
+                            )
+
+            # Ensemble evaluation
+            if ensemble_eval and 'metrics' in ensemble_eval:
+                for k, v in ensemble_eval['metrics'].items():
+                    if isinstance(v, (int, float)):
+                        manager.log_metric(f'ensemble_eval_{k}', v)
+
+            # Log visualization artifacts
+            for viz_file in viz_files:
+                try:
+                    if hasattr(manager, 'log_artifact'):
+                        manager.log_artifact(viz_file, "visualizations")
+                except Exception:
+                    pass
 
         logger.info("MLflow logging complete")
     except Exception as e:
@@ -1100,30 +1572,67 @@ def train_single_crypto(config: TrainingConfig):
     """Full training pipeline for a single cryptocurrency."""
     logger.info(f"{'='*60}")
     logger.info(f"  TRAINING: {config.crypto}")
+    logger.info(f"  Flags: tune={config.tune}, walk_forward={config.walk_forward}, "
+                f"uncertainty={config.uncertainty}")
     logger.info(f"{'='*60}")
 
     # 1. Load data
     loader = ProductionDataLoader(config)
     data = loader.load_and_prepare()
 
-    # 2. Train models
-    trainer = ProductionTrainer(config)
+    # 2. Hyperparameter tuning (optional)
+    tuned_configs = {}
+    tuning_results = None
+    if config.tune:
+        tuned_configs = run_hyperparameter_tuning(config, data)
+        # Store tuning metadata for report
+        tuning_results = tuned_configs
+
+    # 3. Train models (with optional tuned configs)
+    trainer = ProductionTrainer(config, tuned_configs=tuned_configs)
     results = trainer.train_all(data)
 
-    # 3. Generate visualizations
+    # 4. Walk-forward validation (optional)
+    wf_results = None
+    if config.walk_forward:
+        wf_results = run_walk_forward_validation(config, data, results)
+
+    # 5. Uncertainty quantification (on by default)
+    uq_results = None
+    if config.uncertainty:
+        uq_results = run_uncertainty_quantification(results, data, config)
+
+    # 6. Ensemble evaluation (always, if ensemble trained)
+    ensemble_eval = None
+    if 'ensemble' in results:
+        ensemble_eval = run_ensemble_evaluation(results, data)
+
+    # 7. Generate visualizations (unchanged)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     viz_dir = Path(config.output_dir) / f"{config.crypto}_{timestamp}"
     visualizer = TrainingVisualizer(viz_dir, config.crypto)
     viz_files = visualizer.generate_all(results, data)
 
-    # 4. Save models
+    # 8. Save models
     save_models(results, config)
 
-    # 5. Generate report
-    report = generate_report(results, config, viz_dir)
+    # 9. Generate enhanced report
+    report = generate_report(
+        results, config, viz_dir,
+        uq_results=uq_results,
+        wf_results=wf_results,
+        ensemble_eval=ensemble_eval,
+        tuning_results=tuning_results,
+    )
 
-    # 6. Log to MLflow
-    log_to_mlflow(results, config, viz_files)
+    # 10. Log to MLflow (enhanced)
+    log_to_mlflow(
+        results, config, viz_files,
+        uq_results=uq_results,
+        wf_results=wf_results,
+        ensemble_eval=ensemble_eval,
+        tuning_results=tuning_results,
+    )
 
     logger.info(f"Training complete for {config.crypto}")
     logger.info(f"Visualizations: {viz_dir}")
@@ -1145,6 +1654,35 @@ def main():
                         help="Skip ensemble training")
     parser.add_argument("--output-dir", type=str,
                         default=str(current_dir / "training_output"))
+
+    # Hyperparameter tuning
+    parser.add_argument("--tune", action="store_true",
+                        help="Run Optuna hyperparameter optimization before training")
+    parser.add_argument("--tune-trials", type=int, default=20,
+                        help="Optuna trials per model (default: 20)")
+    parser.add_argument("--tune-timeout", type=int, default=3600,
+                        help="Max seconds for tuning per model (default: 3600)")
+    parser.add_argument("--tune-models", type=str, default="lstm,transformer,lightgbm",
+                        help="Comma-separated models to tune (default: lstm,transformer,lightgbm)")
+
+    # Walk-forward validation
+    parser.add_argument("--walk-forward", action="store_true",
+                        help="Run walk-forward cross-validation after training")
+    parser.add_argument("--wf-splits", type=int, default=5,
+                        help="Walk-forward splits (default: 5)")
+    parser.add_argument("--wf-min-train", type=int, default=1000,
+                        help="Min training samples per fold (default: 1000)")
+    parser.add_argument("--wf-rolling", action="store_true",
+                        help="Use rolling window instead of expanding (default: expanding)")
+
+    # Uncertainty & reporting
+    parser.add_argument("--no-uncertainty", action="store_true",
+                        help="Disable MC dropout uncertainty quantification")
+    parser.add_argument("--mc-samples", type=int, default=50,
+                        help="MC dropout samples for uncertainty (default: 50)")
+    parser.add_argument("--no-advanced-mlflow", action="store_true",
+                        help="Use basic MLflow logging instead of advanced")
+
     args = parser.parse_args()
 
     cryptos = [c.strip().upper() for c in args.crypto.split(',')]
@@ -1158,6 +1696,17 @@ def main():
             max_features=args.max_features,
             train_ensemble=not args.no_ensemble,
             output_dir=args.output_dir,
+            tune=args.tune,
+            tune_trials=args.tune_trials,
+            tune_timeout=args.tune_timeout,
+            tune_models=args.tune_models,
+            walk_forward=args.walk_forward,
+            wf_n_splits=args.wf_splits,
+            wf_min_train_size=args.wf_min_train,
+            wf_expanding=not args.wf_rolling,
+            uncertainty=not args.no_uncertainty,
+            mc_samples=args.mc_samples,
+            advanced_mlflow=not args.no_advanced_mlflow,
         )
 
         try:

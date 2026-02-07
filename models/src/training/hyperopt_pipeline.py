@@ -39,12 +39,21 @@ except ImportError:
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# Import our models
-from ..models.transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
-from ..models.enhanced_lstm import EnhancedLSTMForecaster
-from ..models.lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
-from ..models.advanced_ensemble import AdvancedEnsemble
-from .mlflow_integration import MLflowExperimentTracker
+# Import our models (try relative imports first, fall back to absolute)
+try:
+    from ..models.transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
+    from ..models.enhanced_lstm import EnhancedLSTMForecaster
+    from ..models.lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
+    from ..models.advanced_ensemble import AdvancedEnsemble
+    from .mlflow_integration import MLflowExperimentTracker
+except ImportError:
+    import sys
+    sys.path.append(str(Path(__file__).parent.parent))
+    from models.transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
+    from models.enhanced_lstm import EnhancedLSTMForecaster
+    from models.lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
+    from models.advanced_ensemble import AdvancedEnsemble
+    from training.mlflow_integration import MLflowExperimentTracker
 
 
 class OptimizationObjective:

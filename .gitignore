@@ -74,10 +74,13 @@ htmlcov/
 .pytest_cache/
 .claude
 
-# data
+# data (raw/intermediate - not needed for training)
 data/kaggle-extracted/
+data/kaggle-raw/
 data/processed/
-data/features/
+data/sources/
+data/synthetic/
+# data/features/ is kept in repo - required for model training
 
 # analysis results
 ANALYSIS_DOCUMENTATION.md

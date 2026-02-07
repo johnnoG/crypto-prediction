@@ -430,11 +430,13 @@ class EnhancedLSTMForecaster:
         train_pred = self.model.predict(X_train, verbose=0)
 
         if isinstance(y_train, dict):
-            # Multi-step model
+            # Multi-step model - model.predict() returns a list, not a dict
+            output_names = list(y_train.keys())
             metrics = {}
-            for output_name in y_train.keys():
+            for i, output_name in enumerate(output_names):
                 horizon = output_name.replace('output_', '').replace('d', '')
-                train_rmse = np.sqrt(np.mean((y_train[output_name] - train_pred[output_name].flatten()) ** 2))
+                pred_arr = train_pred[i] if isinstance(train_pred, list) else train_pred[output_name]
+                train_rmse = np.sqrt(np.mean((y_train[output_name] - pred_arr.flatten()) ** 2))
                 metrics[f'train_rmse_{horizon}d'] = float(train_rmse)
 
             metrics['epochs_trained'] = len(history.history['loss'])
@@ -450,9 +452,11 @@ class EnhancedLSTMForecaster:
         if X_val is not None:
             val_pred = self.model.predict(X_val, verbose=0)
             if isinstance(y_val, dict):
-                for output_name in y_val.keys():
+                val_output_names = list(y_val.keys())
+                for i, output_name in enumerate(val_output_names):
                     horizon = output_name.replace('output_', '').replace('d', '')
-                    val_rmse = np.sqrt(np.mean((y_val[output_name] - val_pred[output_name].flatten()) ** 2))
+                    pred_arr = val_pred[i] if isinstance(val_pred, list) else val_pred[output_name]
+                    val_rmse = np.sqrt(np.mean((y_val[output_name] - pred_arr.flatten()) ** 2))
                     metrics[f'val_rmse_{horizon}d'] = float(val_rmse)
             else:
                 val_rmse = np.sqrt(np.mean((y_val - val_pred.flatten()) ** 2))

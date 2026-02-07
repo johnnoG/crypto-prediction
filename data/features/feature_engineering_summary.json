@@ -1,0 +1,83 @@
+{
+  "total_cryptocurrencies": 104,
+  "original_features": 5,
+  "engineered_features": 150,
+  "total_features": 155,
+  "feature_categories": {
+    "price_features": 40,
+    "moving_averages": 29,
+    "momentum_indicators": 16,
+    "volatility_indicators": 25,
+    "volume_indicators": 0,
+    "statistical_features": 11,
+    "correlation_features": 11,
+    "regime_features": 5,
+    "time_features": 14,
+    "support_resistance": 8
+  },
+  "sample_features_by_category": {
+    "price_features": [
+      "returns",
+      "log_returns",
+      "momentum_7d",
+      "momentum_14d",
+      "momentum_30d"
+    ],
+    "moving_averages": [
+      "sma_7",
+      "ema_7",
+      "sma_14",
+      "ema_14",
+      "sma_21"
+    ],
+    "momentum_indicators": [
+      "rsi_7",
+      "rsi_7_overbought",
+      "rsi_7_oversold",
+      "rsi_14",
+      "rsi_14_overbought"
+    ],
+    "volatility_indicators": [
+      "volatility_7d",
+      "volatility_30d",
+      "bb_upper_10",
+      "bb_lower_10",
+      "bb_middle_10"
+    ],
+    "statistical_features": [
+      "skewness_10",
+      "kurtosis_10",
+      "skewness_20",
+      "kurtosis_20",
+      "skewness_30"
+    ],
+    "correlation_features": [
+      "autocorr_lag_1",
+      "autocorr_lag_5",
+      "autocorr_lag_10",
+      "corr_BTC_20d",
+      "corr_BTC_60d"
+    ],
+    "regime_features": [
+      "market_volatility",
+      "market_average_return",
+      "high_volatility_regime",
+      "bull_market_regime",
+      "market_stress_regime"
+    ],
+    "time_features": [
+      "kurtosis_10",
+      "kurtosis_20",
+      "kurtosis_30",
+      "day_of_week",
+      "day_of_month"
+    ],
+    "support_resistance": [
+      "rolling_high_20",
+      "rolling_low_20",
+      "rolling_high_50",
+      "rolling_low_50",
+      "rolling_high_100"
+    ]
+  }
+}

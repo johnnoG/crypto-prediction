@@ -379,17 +379,42 @@ class OptimizationObjective:
         return self._calculate_score(y_val_seq, pred.flatten())
 
     def _evaluate_lightgbm(self, config, X_train, y_train, X_val, y_val) -> float:
-        """Evaluate LightGBM model"""
+        """Evaluate LightGBM model.
+
+        LightGBMForecaster expects 3D X (n_samples, seq_len, n_features) and
+        multi-horizon y (n_samples, n_horizons).  The CV splits give us flat
+        2D X and 1D y, so we build sliding-window sequences and multi-step
+        targets here — same logic as build_lgbm_data() in train_production.py.
+        """
+        seq_len = config.get('sequence_length', 60)
+        horizons = config.get('prediction_horizons', [1, 7, 30])
+        max_h = max(horizons)
+
+        def _build_lgbm_data(X_flat, y_flat):
+            n = len(y_flat)
+            X_list, y_list = [], []
+            for i in range(seq_len, n - max_h):
+                X_list.append(X_flat[i - seq_len:i])
+                y_list.append([y_flat[i + h] for h in horizons])
+            if not X_list:
+                return np.array([]), np.array([])
+            return np.array(X_list), np.array(y_list)
+
+        X_train_3d, y_train_multi = _build_lgbm_data(X_train, y_train)
+        X_val_3d, y_val_multi = _build_lgbm_data(X_val, y_val)
+
+        if X_train_3d.size == 0 or X_val_3d.size == 0:
+            return float('inf')
+
         model = LightGBMForecaster(config=config)
+        model.fit(X_train_3d, y_train_multi, validation_data=(X_val_3d, y_val_multi))
 
-        # Train (LightGBMForecaster uses .fit(), not .train())
-        model.fit(X_train, y_train, validation_data=(X_val, y_val))
+        # predict() returns (n_samples, n_horizons) — score on first horizon
+        pred = model.predict(X_val_3d)
+        if pred.ndim == 2:
+            pred = pred[:, 0]
 
-        # Predict
-        pred = model.predict(X_val)
-
-        # Calculate score
-        return self._calculate_score(y_val, pred)
+        return self._calculate_score(y_val_multi[:, 0], pred)
 
     def _evaluate_ensemble(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate Ensemble model"""

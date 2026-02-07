@@ -381,7 +381,7 @@ class AdvancedEnsemble:
             print("\\n[3/4] Training LightGBM model...")
             try:
                 self.lightgbm = LightGBMForecaster()
-                lgb_metrics = self.lightgbm.train(
+                lgb_metrics = self.lightgbm.fit(
                     X_train, y_train, X_val, y_val, feature_names
                 )
                 metrics['lightgbm'] = lgb_metrics

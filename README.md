@@ -37,15 +37,21 @@ python models/src/train_production.py --crypto BTC,ETH
 # Quick validation run
 python models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
 
-# Custom configuration
-python models/src/train_production.py --crypto BTC,ETH,SOL --epochs 200 --batch-size 64
+# With Optuna hyperparameter tuning (20 trials per model)
+python models/src/train_production.py --crypto BTC --tune --tune-trials 20
+
+# Tune LightGBM only (fast) + walk-forward validation
+python models/src/train_production.py --crypto BTC --tune --tune-models lightgbm --walk-forward
+
+# Full professional pipeline
+python models/src/train_production.py --crypto BTC --tune --walk-forward --epochs 150
 ```
 
 Training outputs:
 - Model weights saved to `models/artifacts/`
 - 10 diagnostic PNG plots saved to `models/src/training_output/`
-- JSON training report with all metrics
-- MLflow experiment logs
+- JSON training report with metrics, uncertainty analysis, ensemble evaluation
+- MLflow experiment logs with interactive training curves and model cards
 
 ## Repository Structure
 
@@ -147,7 +153,7 @@ Sliding Window Sequences (60 days lookback)
 |   Enhanced LSTM  |    Transformer     |    LightGBM      |
 | Bidirectional    | Multi-head         | Gradient boosted  |
 | Attention + Res  | Self-attention     | Decision trees   |
-| [256, 128, 64]   | d=256, 8 heads     | 1000 estimators  |
+| [128, 64, 32]    | d=128, 4 heads     | 1000 estimators  |
 +------------------+--------------------+------------------+
     |                    |                    |
     v                    v                    v

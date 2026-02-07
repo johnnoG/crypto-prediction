@@ -382,8 +382,8 @@ class OptimizationObjective:
         """Evaluate LightGBM model"""
         model = LightGBMForecaster(config=config)
 
-        # Train
-        model.train(X_train, y_train, X_val, y_val, self.feature_names)
+        # Train (LightGBMForecaster uses .fit(), not .train())
+        model.fit(X_train, y_train, validation_data=(X_val, y_val))
 
         # Predict
         pred = model.predict(X_val)

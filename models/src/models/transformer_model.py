@@ -430,18 +430,14 @@ class TransformerForecaster:
         self.model.summary()
 
         # Callbacks
+        # Note: ReduceLROnPlateau is NOT used here because the Transformer
+        # optimizer uses a custom TransformerSchedule (LearningRateSchedule)
+        # for warmup + decay. ReduceLROnPlateau conflicts with schedule objects.
         callback_list = [
             callbacks.EarlyStopping(
                 monitor='val_loss' if X_val is not None else 'loss',
                 patience=self.config['early_stopping_patience'],
                 restore_best_weights=True,
-                verbose=1
-            ),
-            callbacks.ReduceLROnPlateau(
-                monitor='val_loss' if X_val is not None else 'loss',
-                factor=0.5,
-                patience=7,
-                min_lr=1e-7,
                 verbose=1
             ),
             callbacks.ModelCheckpoint(

@@ -12,6 +12,7 @@ Advanced Bayesian optimization for cryptocurrency prediction models:
 
 from __future__ import annotations
 
+import gc
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -338,51 +339,58 @@ class OptimizationObjective:
 
     def _evaluate_transformer(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate Transformer model"""
-        model = TransformerForecaster(config=config)
+        try:
+            model = TransformerForecaster(config=config)
 
-        # Prepare sequences
-        train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
-        val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
+            train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
+            val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
 
-        X_train_seq, y_train_seq = model.prepare_sequences(train_data)
-        X_val_seq, y_val_seq = model.prepare_sequences(val_data)
+            X_train_seq, y_train_seq = model.prepare_sequences(train_data)
+            X_val_seq, y_val_seq = model.prepare_sequences(val_data)
 
-        if len(X_train_seq) == 0 or len(X_val_seq) == 0:
-            return float('inf')
+            if len(X_train_seq) == 0 or len(X_val_seq) == 0:
+                return float('inf')
 
-        # Train
-        model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
+            model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
 
-        # Use raw Keras model.predict() to avoid TF 2.18/Metal TensorShape bugs
-        raw_pred = model.model.predict(X_val_seq, verbose=0)
-
-        # Extract first-horizon prediction and matching target
-        pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
-        return self._calculate_score(y_true, pred)
+            raw_pred = model.model.predict(X_val_seq, verbose=0)
+            pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+            return self._calculate_score(y_true, pred)
+        finally:
+            # Free Keras model memory between trials
+            try:
+                import keras
+                keras.backend.clear_session()
+            except Exception:
+                pass
+            gc.collect()
 
     def _evaluate_lstm(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate Enhanced LSTM model"""
-        model = EnhancedLSTMForecaster(config=config)
+        try:
+            model = EnhancedLSTMForecaster(config=config)
 
-        # Prepare sequences
-        train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
-        val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
+            train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
+            val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
 
-        X_train_seq, y_train_seq = model.prepare_sequences(train_data)
-        X_val_seq, y_val_seq = model.prepare_sequences(val_data)
+            X_train_seq, y_train_seq = model.prepare_sequences(train_data)
+            X_val_seq, y_val_seq = model.prepare_sequences(val_data)
 
-        if len(X_train_seq) == 0 or len(X_val_seq) == 0:
-            return float('inf')
+            if len(X_train_seq) == 0 or len(X_val_seq) == 0:
+                return float('inf')
 
-        # Train
-        model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
+            model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
 
-        # Use raw Keras model.predict() to avoid TF 2.18/Metal TensorShape bugs
-        raw_pred = model.model.predict(X_val_seq, verbose=0)
-
-        # Extract first-horizon prediction and matching target
-        pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
-        return self._calculate_score(y_true, pred)
+            raw_pred = model.model.predict(X_val_seq, verbose=0)
+            pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+            return self._calculate_score(y_true, pred)
+        finally:
+            try:
+                import keras
+                keras.backend.clear_session()
+            except Exception:
+                pass
+            gc.collect()
 
     def _evaluate_lightgbm(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate LightGBM model.

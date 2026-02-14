@@ -338,7 +338,7 @@ class ProductionTrainer:
             'lstm_units': [128, 64, 32],        # smaller to reduce overfitting
             'dense_units': [64, 32],             # smaller dense head
             'dropout_rate': 0.4,                 # higher dropout (was 0.25)
-            'recurrent_dropout': 0.2,            # higher recurrent dropout (was 0.15)
+            'recurrent_dropout': 0.0,            # must be 0 for CuDNN/Metal GPU kernels
             'learning_rate': 0.0005,             # lower initial LR (was 0.001)
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
@@ -523,33 +523,59 @@ class ProductionTrainer:
     def _train_ensemble(self, data: Dict) -> Dict[str, Any]:
         artifact_dir = str(Path(self.config.artifacts_dir) / "advanced_ensemble")
 
-        # Start from ensemble defaults, then override with our settings
         ensemble_config = AdvancedEnsemble._default_config()
         ensemble_config.update({
             'sequence_length': self.config.sequence_length,
-            'epochs': max(self.config.epochs // 2, 10),  # lighter for sub-models
-            'batch_size': self.config.batch_size,
             'horizons': [1, 7, 30],
         })
 
         model = AdvancedEnsemble(config=ensemble_config, model_dir=artifact_dir)
 
+        # Reuse already-trained models instead of training from scratch
+        # This saves hours of redundant training
+        trained_models = []
+        if 'transformer' in self.results:
+            model.transformer = self.results['transformer']['model']
+            trained_models.append('transformer')
+        if 'lstm' in self.results:
+            model.enhanced_lstm = self.results['lstm']['model']
+            trained_models.append('enhanced_lstm')
+        if 'lightgbm' in self.results:
+            model.lightgbm = self.results['lightgbm']['model']
+            trained_models.append('lightgbm')
+
+        model.trained_models = trained_models
         price_history = data['y_train_raw']
 
         t0 = time.time()
-        metrics = model.train(
-            X_train=data['X_train'],
-            y_train=data['y_train'],
-            X_val=data['X_val'],
-            y_val=data['y_val'],
-            feature_names=data['feature_names'],
-            price_history=price_history,
-        )
+
+        # Only train meta-learner and regime weights (skip sub-model training)
+        if model.config['use_meta_learner'] and len(trained_models) >= 2:
+            logger.info("  Training meta-learner on pre-trained model predictions...")
+            try:
+                model._train_meta_learner(
+                    data['X_train'], data['y_train'],
+                    data['X_val'], data['y_val'],
+                    price_history,
+                )
+            except Exception as e:
+                logger.warning(f"  Meta-learner training failed: {e}")
+
+        if price_history is not None and model.config['use_regime_weighting']:
+            model._initialize_regime_weights(price_history)
+
+        model.metadata = {
+            'trained_at': datetime.now().isoformat(),
+            'config': ensemble_config,
+            'trained_models': trained_models,
+            'reused_pretrained': True,
+        }
+
         train_time = time.time() - t0
 
         return {
             'model': model,
-            'metrics': metrics,
+            'metrics': {},
             'train_time': train_time,
             'config': ensemble_config,
         }
@@ -880,10 +906,10 @@ class TrainingVisualizer:
         fig.suptitle(f'{self.crypto} — Metrics Progression', fontsize=14, fontweight='bold')
 
         metric_pairs = [
-            ('mae', 'val_mae', 'MAE'),
-            ('mse', 'val_mse', 'MSE'),
-            ('output_1d_mae', 'val_output_1d_mae', '1-Day MAE'),
-            ('output_7d_mae', 'val_output_7d_mae', '7-Day MAE'),
+            ('loss', 'val_loss', 'Total Loss'),
+            ('output_1d_loss', 'val_output_1d_loss', '1-Day Loss'),
+            ('output_7d_loss', 'val_output_7d_loss', '7-Day Loss'),
+            ('output_30d_loss', 'val_output_30d_loss', '30-Day Loss'),
         ]
 
         for ax, (train_key, val_key, title) in zip(axes.flat, metric_pairs):
@@ -916,19 +942,27 @@ class TrainingVisualizer:
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.set_title(f'{self.crypto} — Learning Rate Schedules', fontsize=14, fontweight='bold')
 
+        has_data = False
         for model_name in ('lstm', 'transformer'):
             if model_name not in results:
                 continue
             h = results[model_name].get('history', {})
-            lr = h.get('lr', [])
+            # TF 2.18/Keras 3.x uses 'learning_rate', older versions use 'lr'
+            lr = h.get('lr', h.get('learning_rate', []))
             if lr:
                 ax.plot(range(1, len(lr) + 1), lr, label=model_name.upper(), linewidth=2)
+                has_data = True
 
-        ax.set_xlabel('Epoch')
-        ax.set_ylabel('Learning Rate')
-        ax.set_yscale('log')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        if has_data:
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Learning Rate')
+            ax.set_yscale('log')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, 'No LR history recorded', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12, color='gray')
+
         fig.tight_layout()
         self._save(fig, 'learning_rates.png')
 
@@ -975,12 +1009,25 @@ class TrainingVisualizer:
         lgbm_model = results['lightgbm']['model']
 
         try:
-            importance = lgbm_model.get_feature_importance()
-            if not importance:
+            raw_importance = lgbm_model.get_feature_importance()
+            if not raw_importance:
+                return
+
+            # Aggregate across horizons (get_feature_importance returns per-horizon dicts)
+            aggregated = {}
+            for horizon_key, feat_dict in raw_importance.items():
+                if isinstance(feat_dict, dict):
+                    for feat, val in feat_dict.items():
+                        aggregated[feat] = aggregated.get(feat, 0) + val
+                else:
+                    # Already flat {feature: value}
+                    aggregated[horizon_key] = feat_dict
+
+            if not aggregated:
                 return
 
             # Take top 30
-            sorted_imp = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:30]
+            sorted_imp = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)[:30]
             names, values = zip(*sorted_imp)
 
             fig, ax = plt.subplots(figsize=(10, 8))
@@ -1020,16 +1067,26 @@ class TrainingVisualizer:
 
             if isinstance(y_test, dict):
                 # Multi-output model (LSTM / Transformer)
-                pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
                 for i, h in enumerate(horizons):
                     key = f'output_{h}'
-                    if key in y_test and i < len(pred_list):
-                        y_true = y_test[key]
-                        y_pred = pred_list[i].flatten()[:len(y_true)]
-                        comparison[model_name][h] = {
-                            'rmse': float(np.sqrt(mean_squared_error(y_true, y_pred))),
-                            'mae': float(mean_absolute_error(y_true, y_pred)),
-                        }
+                    if key not in y_test:
+                        continue
+                    y_true = y_test[key]
+                    # test_preds can be dict (named outputs) or list (positional)
+                    if isinstance(test_preds, dict):
+                        y_pred_raw = test_preds.get(key)
+                        if y_pred_raw is None:
+                            continue
+                        y_pred = np.asarray(y_pred_raw).flatten()[:len(y_true)]
+                    else:
+                        pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
+                        if i >= len(pred_list):
+                            continue
+                        y_pred = np.asarray(pred_list[i]).flatten()[:len(y_true)]
+                    comparison[model_name][h] = {
+                        'rmse': float(np.sqrt(mean_squared_error(y_true, y_pred))),
+                        'mae': float(mean_absolute_error(y_true, y_pred)),
+                    }
             elif isinstance(y_test, np.ndarray) and y_test.ndim == 2:
                 # LightGBM multi-horizon
                 preds = test_preds if isinstance(test_preds, np.ndarray) else np.array(test_preds)
@@ -1113,11 +1170,18 @@ class TrainingVisualizer:
             if key not in y_test:
                 return None, None
             y_true = y_test[key]
-            pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
-            if idx < len(pred_list):
-                y_pred = pred_list[idx].flatten()
+            # test_preds can be: list of arrays, dict of arrays, or single array
+            if isinstance(test_preds, dict):
+                y_pred_raw = test_preds.get(key)
+                if y_pred_raw is None:
+                    return None, None
+                y_pred = np.asarray(y_pred_raw).flatten()
             else:
-                return None, None
+                pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
+                if idx < len(pred_list):
+                    y_pred = np.asarray(pred_list[idx]).flatten()
+                else:
+                    return None, None
         elif isinstance(y_test, np.ndarray) and y_test.ndim == 2:
             if idx >= y_test.shape[1]:
                 return None, None
@@ -1367,8 +1431,14 @@ def generate_report(
         }
         metrics = r.get('metrics', {})
         if isinstance(metrics, dict):
-            entry['metrics'] = {k: v for k, v in metrics.items()
-                                if isinstance(v, (int, float, str))}
+            clean_metrics = {}
+            for k, v in metrics.items():
+                if isinstance(v, (int, float, str)):
+                    clean_metrics[k] = v
+                elif isinstance(v, list) and v and isinstance(v[0], (int, float)):
+                    # LightGBM stores per-horizon metrics as lists
+                    clean_metrics[k] = v
+            entry['metrics'] = clean_metrics
         report['models'][model_name] = entry
 
     # Hyperparameter tuning results
@@ -1607,32 +1677,42 @@ def train_single_crypto(config: TrainingConfig):
     if 'ensemble' in results:
         ensemble_eval = run_ensemble_evaluation(results, data)
 
-    # 7. Generate visualizations (unchanged)
+    # 7. Save models FIRST (never lose trained weights to a viz crash)
+    save_models(results, config)
+
+    # 8. Generate visualizations (non-fatal — wrapped in try/except)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     viz_dir = Path(config.output_dir) / f"{config.crypto}_{timestamp}"
     visualizer = TrainingVisualizer(viz_dir, config.crypto)
-    viz_files = visualizer.generate_all(results, data)
+    viz_files = []
+    try:
+        viz_files = visualizer.generate_all(results, data)
+    except Exception as e:
+        logger.warning(f"Visualization generation failed (models already saved): {e}")
 
-    # 8. Save models
-    save_models(results, config)
+    # 9. Generate enhanced report (non-fatal)
+    try:
+        report = generate_report(
+            results, config, viz_dir,
+            uq_results=uq_results,
+            wf_results=wf_results,
+            ensemble_eval=ensemble_eval,
+            tuning_results=tuning_results,
+        )
+    except Exception as e:
+        logger.warning(f"Report generation failed (models already saved): {e}")
 
-    # 9. Generate enhanced report
-    report = generate_report(
-        results, config, viz_dir,
-        uq_results=uq_results,
-        wf_results=wf_results,
-        ensemble_eval=ensemble_eval,
-        tuning_results=tuning_results,
-    )
-
-    # 10. Log to MLflow (enhanced)
-    log_to_mlflow(
-        results, config, viz_files,
-        uq_results=uq_results,
-        wf_results=wf_results,
-        ensemble_eval=ensemble_eval,
-        tuning_results=tuning_results,
-    )
+    # 10. Log to MLflow (non-fatal)
+    try:
+        log_to_mlflow(
+            results, config, viz_files,
+            uq_results=uq_results,
+            wf_results=wf_results,
+            ensemble_eval=ensemble_eval,
+            tuning_results=tuning_results,
+        )
+    except Exception as e:
+        logger.warning(f"MLflow logging failed (models already saved): {e}")
 
     logger.info(f"Training complete for {config.crypto}")
     logger.info(f"Visualizations: {viz_dir}")

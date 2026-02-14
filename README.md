@@ -28,7 +28,7 @@ docker-compose up -d
 #   API Docs:  http://localhost:8000/docs
 ```
 
-### Train Models (Google Colab with GPU recommended)
+### Train Models (GPU recommended: Colab T4/A100 or Apple Silicon with Metal)
 
 ```bash
 # Full production training for BTC and ETH
@@ -153,7 +153,7 @@ Sliding Window Sequences (60 days lookback)
 |   Enhanced LSTM  |    Transformer     |    LightGBM      |
 | Bidirectional    | Multi-head         | Gradient boosted  |
 | Attention + Res  | Self-attention     | Decision trees   |
-| [128, 64, 32]    | d=128, 4 heads     | 1000 estimators  |
+| [128, 64, 32]    | d=128, 4 heads     | Optuna-tuned     |
 +------------------+--------------------+------------------+
     |                    |                    |
     v                    v                    v
@@ -178,7 +178,7 @@ Each training run generates 10 diagnostic plots:
 | Plot | Description |
 |------|-------------|
 | `loss_curves.png` | Train vs validation loss for each model |
-| `metrics_progression.png` | MAE/MSE per horizon over training |
+| `metrics_progression.png` | Per-horizon loss progression over training |
 | `learning_rates.png` | LR schedules (warmup, decay, plateau) |
 | `attention_heatmap.png` | LSTM attention weights over timesteps |
 | `feature_importance.png` | Top 30 LightGBM features |
@@ -258,7 +258,7 @@ The system processes data for 104 cryptocurrencies spanning 2010-2026:
 - Python 3.11+ with pip
 - Node.js 18+
 - Docker & Docker Compose
-- GPU recommended for model training (Google Colab T4/A100 works well)
+- GPU recommended for model training (Google Colab T4/A100 or Apple Silicon Mac with Metal)
 
 ### Local Setup
 
@@ -274,6 +274,11 @@ npm install && npm run dev
 
 # ML environment
 pip install -r requirements.txt  # Root requirements.txt
+
+# ML environment with Apple Silicon GPU (requires Python 3.12)
+python3.12 -m venv tf-gpu-env && source tf-gpu-env/bin/activate
+pip install tensorflow==2.18 tensorflow-metal
+pip install -r requirements.txt
 
 # Start infrastructure
 docker-compose up -d  # PostgreSQL + Redis
@@ -315,10 +320,18 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Phase 2: ML Models** — LSTM, Transformer, LightGBM, and Ensemble models fully implemented with multi-step forecasting, attention mechanisms, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
+- **BTC & ETH Production Training** — Full pipeline with Optuna LightGBM tuning, MC dropout uncertainty, ensemble evaluation, 10 diagnostic visualizations per run
+
+### Latest Training Results (Feb 2026)
+
+| Crypto | Best Model | Test RMSE (1d) | Val RMSE (1d) | Notes |
+|--------|------------|----------------|---------------|-------|
+| ETH | LightGBM | 0.13 | 0.10 MAE | Near production-ready, all models generalize well |
+| BTC | LightGBM | 5.81 | 0.88 MAE | Harder target — higher variance, more regime changes |
 
 ### In Progress
 
-- Production model training on GPU (BTC, ETH, then expanding to more coins)
+- Expanding training to top-20 coins by data availability (LTC, XRP, DOGE, BNB, SOL, etc.)
 - WebSocket streaming integration in frontend
 - Advanced analytics dashboard with live predictions
 

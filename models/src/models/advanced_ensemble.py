@@ -236,7 +236,7 @@ class AdvancedEnsemble:
         # Dynamic weights
         self.model_weights = {
             'transformer': self.config.get('transformer_weight', 0.4),
-            'lstm': self.config.get('lstm_weight', 0.35),
+            'enhanced_lstm': self.config.get('lstm_weight', 0.35),
             'lightgbm': self.config.get('lightgbm_weight', 0.25)
         }
 
@@ -381,12 +381,38 @@ class AdvancedEnsemble:
             print("\\n[3/4] Training LightGBM model...")
             try:
                 self.lightgbm = LightGBMForecaster()
-                lgb_metrics = self.lightgbm.fit(
-                    X_train, y_train, X_val, y_val, feature_names
-                )
-                metrics['lightgbm'] = lgb_metrics
-                trained_models.append('lightgbm')
-                print(f"✅ LightGBM trained successfully")
+                # LightGBM needs 3D X and multi-horizon y — build from flat data
+                seq_len = self.config.get('sequence_length', 60)
+                horizons = self.config.get('horizons', [1, 7, 30])
+                max_h = max(horizons)
+
+                def _build_lgbm_data(X_flat, y_flat):
+                    n = len(y_flat)
+                    X_list, y_list = [], []
+                    for i in range(seq_len, n - max_h):
+                        X_list.append(X_flat[i - seq_len:i])
+                        y_list.append([y_flat[i + h] for h in horizons])
+                    if not X_list:
+                        return np.array([]), np.array([])
+                    return np.array(X_list), np.array(y_list)
+
+                X_train_lgb, y_train_lgb = _build_lgbm_data(X_train, y_train)
+                val_data = None
+                if X_val is not None and y_val is not None:
+                    X_val_lgb, y_val_lgb = _build_lgbm_data(X_val, y_val)
+                    if X_val_lgb.size > 0:
+                        val_data = (X_val_lgb, y_val_lgb)
+
+                if X_train_lgb.size > 0:
+                    lgb_metrics = self.lightgbm.fit(
+                        X_train_lgb, y_train_lgb, validation_data=val_data
+                    )
+                    metrics['lightgbm'] = lgb_metrics
+                    trained_models.append('lightgbm')
+                    print(f"✅ LightGBM trained successfully")
+                else:
+                    print(f"❌ LightGBM skipped: not enough data for sequences")
+                    self.lightgbm = None
 
             except Exception as e:
                 print(f"❌ LightGBM training failed: {e}")
@@ -439,13 +465,22 @@ class AdvancedEnsemble:
                 print("⚠️ Need at least 2 base models for meta-learning")
                 return
 
+            # Predictions are shorter than y_train due to windowing —
+            # trim all to the minimum length
+            min_len = min(len(v) for v in base_predictions.values())
+            trimmed = {k: v[:min_len] for k, v in base_predictions.items()}
+
             # Stack predictions
-            stacked_features = np.column_stack(list(base_predictions.values()))
+            stacked_features = np.column_stack(list(trimmed.values()))
+
+            # Trim y_train to match (take the LAST min_len values since
+            # windowing drops the first seq_len and last max_horizon samples)
+            y_meta = y_train[-min_len:] if len(y_train) > min_len else y_train
 
             # Add regime features if available
-            if price_history is not None and len(price_history) >= len(y_train):
+            if price_history is not None and len(price_history) >= min_len:
                 regime_features = self._extract_regime_features(
-                    price_history[-len(y_train):]
+                    price_history[-min_len:]
                 )
                 stacked_features = np.column_stack([stacked_features, regime_features])
 
@@ -466,7 +501,7 @@ class AdvancedEnsemble:
                 self.meta_model = Ridge(alpha=self.config['meta_alpha'])
 
             # Train meta-learner
-            self.meta_model.fit(stacked_features, y_train)
+            self.meta_model.fit(stacked_features, y_meta)
 
             # Print meta-learner coefficients if available
             if hasattr(self.meta_model, 'coef_'):
@@ -489,58 +524,62 @@ class AdvancedEnsemble:
         X: np.ndarray,
         for_training: bool = False
     ) -> Dict[str, np.ndarray]:
-        """Get predictions from all available base models"""
+        """Get predictions from all available base models.
+
+        X is flat 2D (n_samples, n_features).  Each model needs sequenced
+        input, so we build sequences here before predicting.
+        """
         predictions = {}
+        seq_len = self.config.get('sequence_length', 60)
+
+        def _extract_first_horizon(pred):
+            """Extract first-horizon predictions as a flat array."""
+            if isinstance(pred, dict):
+                return np.asarray(list(pred.values())[0]).flatten()
+            elif isinstance(pred, list):
+                return np.asarray(pred[0]).flatten()
+            elif isinstance(pred, np.ndarray) and pred.ndim == 2:
+                return pred[:, 0].flatten()
+            return np.asarray(pred).flatten()
+
+        # Build combined array for prepare_sequences (target col 0 = zeros)
+        dummy_targets = np.zeros((X.shape[0], 1))
+        combined = np.column_stack([dummy_targets, X])
 
         # Transformer predictions
         if self.transformer is not None:
             try:
-                if for_training:
-                    # Need to create sequences
-                    dummy_targets = np.zeros((X.shape[0], 1))
-                    X_seq, _ = self.transformer.prepare_sequences(
-                        np.column_stack([dummy_targets, X])
-                    )
-                    if len(X_seq) > 0:
-                        pred = self.transformer.predict(X_seq)
-                        if isinstance(pred, dict):
-                            # Multi-horizon, take first horizon
-                            pred = list(pred.values())[0]
-                        predictions['transformer'] = pred.flatten()
-                else:
-                    pred = self.transformer.predict(X)
-                    if isinstance(pred, dict):
-                        pred = list(pred.values())[0]
-                    predictions['transformer'] = pred.flatten()
+                X_seq, _ = self.transformer.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    # Use raw Keras model to avoid wrapper issues on Metal
+                    raw_pred = self.transformer.model.predict(X_seq, verbose=0)
+                    predictions['transformer'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: Transformer prediction failed: {e}")
 
         # Enhanced LSTM predictions
         if self.enhanced_lstm is not None:
             try:
-                if for_training:
-                    dummy_targets = np.zeros((X.shape[0], 1))
-                    X_seq, _ = self.enhanced_lstm.prepare_sequences(
-                        np.column_stack([dummy_targets, X])
-                    )
-                    if len(X_seq) > 0:
-                        pred = self.enhanced_lstm.predict(X_seq)
-                        if isinstance(pred, dict):
-                            pred = list(pred.values())[0]
-                        predictions['enhanced_lstm'] = pred.flatten()
-                else:
-                    pred = self.enhanced_lstm.predict(X)
-                    if isinstance(pred, dict):
-                        pred = list(pred.values())[0]
-                    predictions['enhanced_lstm'] = pred.flatten()
+                X_seq, _ = self.enhanced_lstm.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.enhanced_lstm.model.predict(X_seq, verbose=0)
+                    predictions['enhanced_lstm'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: Enhanced LSTM prediction failed: {e}")
 
-        # LightGBM predictions
+        # LightGBM predictions — needs 3D sequenced input
         if self.lightgbm is not None:
             try:
-                pred = self.lightgbm.predict(X)
-                predictions['lightgbm'] = pred.flatten()
+                horizons = self.config.get('horizons', [1, 7, 30])
+                max_h = max(horizons)
+                n = X.shape[0]
+                X_list = []
+                for i in range(seq_len, n - max_h):
+                    X_list.append(X[i - seq_len:i])
+                if X_list:
+                    X_3d = np.array(X_list)
+                    raw_pred = self.lightgbm.predict(X_3d)
+                    predictions['lightgbm'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: LightGBM prediction failed: {e}")
 
@@ -614,6 +653,10 @@ class AdvancedEnsemble:
 
         if not base_predictions:
             raise ValueError("No trained models available for prediction")
+
+        # Trim all predictions to same length (windowing may differ slightly)
+        min_len = min(len(v) for v in base_predictions.values())
+        base_predictions = {k: v[:min_len] for k, v in base_predictions.items()}
 
         # Update weights based on current regime
         if price_history is not None and self.config['use_regime_weighting']:
@@ -869,22 +912,37 @@ class AdvancedEnsemble:
 
         ensemble_pred = individual_preds.pop('ensemble', None)
 
+        # Predictions are shorter than y_test due to windowing (seq_len + max_horizon
+        # samples lost).  Align y_test to the END of the array so predictions
+        # correspond to the most recent data points.
+        all_preds = list(individual_preds.values())
+        if ensemble_pred is not None:
+            all_preds.append(ensemble_pred)
+        if not all_preds:
+            return {}
+        min_len = min(len(p) for p in all_preds)
+        y_eval = y_test[-min_len:]
+
         # Evaluate each model
         for model, pred in individual_preds.items():
-            if len(pred) == len(y_test):
-                rmse = np.sqrt(mean_squared_error(y_test, pred))
-                mae = mean_absolute_error(y_test, pred)
-                mape = np.mean(np.abs((y_test - pred) / y_test)) * 100
+            pred_trimmed = pred[:min_len]
+            rmse = np.sqrt(mean_squared_error(y_eval, pred_trimmed))
+            mae = mean_absolute_error(y_eval, pred_trimmed)
+            # Avoid division by zero for MAPE
+            mask = np.abs(y_eval) > 1e-8
+            mape = np.mean(np.abs((y_eval[mask] - pred_trimmed[mask]) / y_eval[mask])) * 100 if mask.any() else 0.0
 
-                results[f'{model}_rmse'] = rmse
-                results[f'{model}_mae'] = mae
-                results[f'{model}_mape'] = mape
+            results[f'{model}_rmse'] = rmse
+            results[f'{model}_mae'] = mae
+            results[f'{model}_mape'] = mape
 
         # Evaluate ensemble
-        if ensemble_pred is not None and len(ensemble_pred) == len(y_test):
-            ensemble_rmse = np.sqrt(mean_squared_error(y_test, ensemble_pred))
-            ensemble_mae = mean_absolute_error(y_test, ensemble_pred)
-            ensemble_mape = np.mean(np.abs((y_test - ensemble_pred) / y_test)) * 100
+        if ensemble_pred is not None:
+            ens_trimmed = ensemble_pred[:min_len]
+            ensemble_rmse = np.sqrt(mean_squared_error(y_eval, ens_trimmed))
+            ensemble_mae = mean_absolute_error(y_eval, ens_trimmed)
+            mask = np.abs(y_eval) > 1e-8
+            ensemble_mape = np.mean(np.abs((y_eval[mask] - ens_trimmed[mask]) / y_eval[mask])) * 100 if mask.any() else 0.0
 
             results['ensemble_rmse'] = ensemble_rmse
             results['ensemble_mae'] = ensemble_mae
@@ -897,7 +955,7 @@ class AdvancedEnsemble:
                 improvement = (best_individual_rmse - ensemble_rmse) / best_individual_rmse * 100
                 results['improvement_pct'] = improvement
 
-                print(f"🎯 Ensemble improves over best individual model by {improvement:.2f}%")
+                print(f"Ensemble improves over best individual model by {improvement:.2f}%")
 
         return results
 

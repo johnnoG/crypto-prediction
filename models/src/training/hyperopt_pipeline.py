@@ -172,51 +172,59 @@ class OptimizationObjective:
                 self.mlflow_tracker.end_run()
 
     def _suggest_transformer_params(self, trial: optuna.Trial) -> Dict[str, Any]:
-        """Suggest hyperparameters for Transformer model"""
+        """Suggest hyperparameters for Transformer model.
+
+        Search space is sized for ~3700 training samples.
+        d_model=128, 3 layers already proven optimal on BTC/ETH.
+        """
         return {
-            'sequence_length': trial.suggest_int('sequence_length', 30, 120, step=10),
-            'd_model': trial.suggest_categorical('d_model', [256, 512, 768]),
-            'num_heads': trial.suggest_categorical('num_heads', [4, 8, 12]),
-            'ff_dim': trial.suggest_categorical('ff_dim', [1024, 2048, 3072]),
-            'num_layers': trial.suggest_int('num_layers', 3, 8),
-            'dropout_rate': trial.suggest_float('dropout_rate', 0.05, 0.3),
+            'sequence_length': 60,
+            'n_features': self.X_train.shape[1],
+            'multi_step': [1, 7, 30],
+            'd_model': trial.suggest_categorical('d_model', [64, 128, 256]),
+            'num_heads': trial.suggest_categorical('num_heads', [4, 8]),
+            'ff_dim': trial.suggest_categorical('ff_dim', [256, 512, 1024]),
+            'num_layers': trial.suggest_int('num_layers', 2, 4),
+            'dropout_rate': trial.suggest_float('dropout_rate', 0.1, 0.4),
             'learning_rate': trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True),
-            'batch_size': trial.suggest_categorical('batch_size', [16, 32, 64]),
-            'warmup_steps': trial.suggest_int('warmup_steps', 500, 2000),
-            'epochs': 50,  # Fixed for optimization speed
-            'early_stopping_patience': 10
+            'batch_size': trial.suggest_categorical('batch_size', [32, 64]),
+            'warmup_steps': trial.suggest_int('warmup_steps', 200, 1000),
+            'use_causal_mask': True,
+            'epochs': 30,
+            'early_stopping_patience': 8,
         }
 
     def _suggest_lstm_params(self, trial: optuna.Trial) -> Dict[str, Any]:
-        """Suggest hyperparameters for Enhanced LSTM model"""
-        # Number of LSTM layers
-        n_layers = trial.suggest_int('n_lstm_layers', 1, 3)
-        lstm_units = []
-        for i in range(n_layers):
-            units = trial.suggest_categorical(f'lstm_units_{i}', [32, 64, 128, 256])
-            lstm_units.append(units)
+        """Suggest hyperparameters for Enhanced LSTM model.
 
-        # Dense layers
-        n_dense = trial.suggest_int('n_dense_layers', 1, 3)
-        dense_units = []
-        for i in range(n_dense):
-            units = trial.suggest_categorical(f'dense_units_{i}', [16, 32, 64, 128])
-            dense_units.append(units)
+        Search space is sized for ~3700 training samples.
+        Units capped at 128 to prevent overfitting.
+        """
+        n_layers = trial.suggest_int('n_lstm_layers', 1, 3)
+        lstm_units = [trial.suggest_categorical(f'lstm_units_{i}', [32, 64, 128])
+                      for i in range(n_layers)]
+
+        n_dense = trial.suggest_int('n_dense_layers', 1, 2)
+        dense_units = [trial.suggest_categorical(f'dense_units_{i}', [16, 32, 64])
+                       for i in range(n_dense)]
 
         return {
-            'sequence_length': trial.suggest_int('sequence_length', 30, 120, step=10),
+            'sequence_length': 60,
+            'n_features': self.X_train.shape[1],
+            'multi_step': [1, 7, 30],
             'lstm_units': lstm_units,
             'dense_units': dense_units,
-            'dropout_rate': trial.suggest_float('dropout_rate', 0.1, 0.4),
-            'recurrent_dropout': trial.suggest_float('recurrent_dropout', 0.0, 0.2),
-            'learning_rate': trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True),
-            'batch_size': trial.suggest_categorical('batch_size', [16, 32, 64]),
+            'dropout_rate': trial.suggest_float('dropout_rate', 0.2, 0.5),
+            'recurrent_dropout': 0.0,             # must be 0 for CuDNN/Metal GPU kernels
+            'learning_rate': trial.suggest_float('learning_rate', 1e-4, 5e-3, log=True),
+            'batch_size': trial.suggest_categorical('batch_size', [32, 64]),
             'use_bidirectional': trial.suggest_categorical('use_bidirectional', [True, False]),
             'use_attention': trial.suggest_categorical('use_attention', [True, False]),
-            'use_residual': trial.suggest_categorical('use_residual', [True, False]),
+            'use_residual': True,
+            'use_layer_norm': True,
             'gradient_clip': trial.suggest_float('gradient_clip', 0.5, 2.0),
-            'epochs': 50,
-            'early_stopping_patience': 10
+            'epochs': 30,
+            'early_stopping_patience': 8,
         }
 
     def _suggest_lightgbm_params(self, trial: optuna.Trial) -> Dict[str, Any]:
@@ -225,16 +233,16 @@ class OptimizationObjective:
             'objective': 'regression',
             'metric': 'rmse',
             'boosting_type': 'gbdt',
-            'num_leaves': trial.suggest_int('num_leaves', 10, 200),
+            'num_leaves': trial.suggest_int('num_leaves', 10, 80),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
             'feature_fraction': trial.suggest_float('feature_fraction', 0.6, 1.0),
             'bagging_fraction': trial.suggest_float('bagging_fraction', 0.6, 1.0),
             'bagging_freq': trial.suggest_int('bagging_freq', 1, 7),
-            'min_child_samples': trial.suggest_int('min_child_samples', 5, 100),
-            'lambda_l1': trial.suggest_float('lambda_l1', 1e-8, 10.0, log=True),
-            'lambda_l2': trial.suggest_float('lambda_l2', 1e-8, 10.0, log=True),
-            'max_depth': trial.suggest_int('max_depth', 3, 15),
-            'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+            'min_child_samples': trial.suggest_int('min_child_samples', 10, 100),
+            'lambda_l1': trial.suggest_float('lambda_l1', 1e-4, 10.0, log=True),
+            'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
+            'max_depth': trial.suggest_int('max_depth', 3, 10),
+            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
             'random_state': 42,
             'verbose': -1
         }
@@ -345,13 +353,12 @@ class OptimizationObjective:
         # Train
         model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
 
-        # Predict
-        pred = model.predict(X_val_seq)
-        if isinstance(pred, dict):
-            pred = list(pred.values())[0]  # Take first horizon
+        # Use raw Keras model.predict() to avoid TF 2.18/Metal TensorShape bugs
+        raw_pred = model.model.predict(X_val_seq, verbose=0)
 
-        # Calculate score
-        return self._calculate_score(y_val_seq, pred.flatten())
+        # Extract first-horizon prediction and matching target
+        pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+        return self._calculate_score(y_true, pred)
 
     def _evaluate_lstm(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate Enhanced LSTM model"""
@@ -370,13 +377,12 @@ class OptimizationObjective:
         # Train
         model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
 
-        # Predict
-        pred = model.predict(X_val_seq)
-        if isinstance(pred, dict):
-            pred = list(pred.values())[0]
+        # Use raw Keras model.predict() to avoid TF 2.18/Metal TensorShape bugs
+        raw_pred = model.model.predict(X_val_seq, verbose=0)
 
-        # Calculate score
-        return self._calculate_score(y_val_seq, pred.flatten())
+        # Extract first-horizon prediction and matching target
+        pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+        return self._calculate_score(y_true, pred)
 
     def _evaluate_lightgbm(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate LightGBM model.
@@ -439,6 +445,34 @@ class OptimizationObjective:
         except Exception as e:
             print(f"Ensemble evaluation failed: {e}")
             return float('inf')
+
+    @staticmethod
+    def _extract_first_horizon(raw_pred, y_seq):
+        """Extract first-horizon predictions and targets from multi-output data.
+
+        raw_pred: Keras output — dict, list of arrays, or 2D array.
+        y_seq:    Target — dict (multi-output), or array (single-output).
+        Returns:  (pred_1d, y_true_1d) as flat arrays.
+        """
+        # Extract prediction for first horizon
+        if isinstance(raw_pred, dict):
+            pred = np.asarray(list(raw_pred.values())[0]).flatten()
+        elif isinstance(raw_pred, list):
+            pred = np.asarray(raw_pred[0]).flatten()
+        elif isinstance(raw_pred, np.ndarray) and raw_pred.ndim == 2:
+            pred = raw_pred[:, 0].flatten()
+        else:
+            pred = np.asarray(raw_pred).flatten()
+
+        # Extract target for first horizon
+        if isinstance(y_seq, dict):
+            y_true = np.asarray(list(y_seq.values())[0]).flatten()
+        elif isinstance(y_seq, np.ndarray) and y_seq.ndim == 2:
+            y_true = y_seq[:, 0].flatten()
+        else:
+            y_true = np.asarray(y_seq).flatten()
+
+        return pred, y_true
 
     def _calculate_score(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         """Calculate evaluation score based on optimization metric"""

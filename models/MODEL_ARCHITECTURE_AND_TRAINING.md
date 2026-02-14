@@ -50,7 +50,7 @@ Input (60 timesteps x 61 features)
 - **Residual connections**: Each `ResidualLSTMCell` wraps a standard LSTM with a linear projection skip-connection and layer normalization. This prevents gradient vanishing in the three-layer stack and allows the model to learn incremental refinements rather than complete transformations at each layer.
 - **Attention mechanism**: After the LSTM stack, a Bahdanau-style attention layer computes learned weights over all 60 timesteps. This lets the model focus on the most predictive time points (e.g., a sudden volume spike 12 days ago or a support level test 45 days ago) rather than relying solely on the final hidden state.
 - **Multi-step heads**: Separate output heads for 1-day, 7-day, and 30-day horizons. Shorter horizons receive higher loss weights (`1/sqrt(h)`) because near-term predictions are more actionable and more feasible.
-- **Recurrent dropout (0.2)**: Applied within the LSTM recurrence at each timestep, providing stronger regularization than standard dropout alone. Requires GPU (CuDNN) for acceptable training speed.
+- **No recurrent dropout**: Recurrent dropout is set to 0.0 to enable fast CuDNN (NVIDIA) and Metal (Apple Silicon) GPU kernels. Any value > 0 forces a pure Python LSTM fallback that is 10-100x slower. Standard dropout (0.4) between layers provides sufficient regularization.
 - **Monte Carlo dropout**: At inference time, dropout remains active across 100 forward passes. The variance of predictions provides a calibrated uncertainty estimate without requiring a separate model.
 
 ### Hyperparameters (Production)
@@ -61,7 +61,7 @@ Input (60 timesteps x 61 features)
 | LSTM units | [128, 64, 32] | Three-layer stack with tapering width; reduced from [256,128,64] to combat overfitting on ~3700 training samples |
 | Dense units | [64, 32] | Two dense layers before output heads for non-linear feature combination |
 | Dropout | 0.4 | Aggressive regularization for noisy financial data with limited samples |
-| Recurrent dropout | 0.2 | Per-timestep regularization within LSTM recurrence |
+| Recurrent dropout | 0.0 | Disabled — enables CuDNN/Metal GPU kernels (10-100x faster) |
 | Learning rate | 0.0005 | Adam with early stopping; lower LR for more stable convergence |
 | Gradient clipping | 1.0 | Prevents exploding gradients common in financial time series |
 | Batch size | 64 | Larger batches for GPU utilization and gradient stability |
@@ -239,13 +239,13 @@ Raw Parquet (5600+ rows, 150+ features per crypto)
 [6] Train: LSTM -> Transformer -> LightGBM -> Ensemble (sequential)
      |
      v
-[7] Evaluate: per-horizon RMSE / MAE / R-squared on held-out test set
+[7] Save: model weights to models/artifacts/ (saved FIRST — crash-safe)
      |
      v
 [8] Visualize: 10 PNG diagnostic plots saved to training_output/
      |
      v
-[9] Save: model weights to models/artifacts/ + training report JSON
+[9] Report: training report JSON with metrics, uncertainty, ensemble eval
      |
      v
 [10] Log: all metrics, configs, and artifacts to MLflow
@@ -298,7 +298,7 @@ The training script generates 10 diagnostic plots per cryptocurrency:
 
 ## Running Training
 
-**GPU is required for production training.** Google Colab (T4/A100) is recommended. On a T4 GPU, full training takes approximately 15-30 minutes per cryptocurrency.
+**GPU is strongly recommended for production training.** Google Colab (T4/A100) or Apple Silicon Macs with Metal GPU acceleration both work. On a T4 GPU, full training takes approximately 15-30 minutes per cryptocurrency.
 
 ```bash
 # Full production training for BTC and ETH
@@ -397,8 +397,21 @@ mlflow ui --backend-store-uri file://models/src/mlruns_production --port 5000
 
 | Setup | LSTM Epoch | Transformer Epoch | Full Training |
 |-------|-----------|-------------------|---------------|
-| CPU (M1 Mac) | ~5-10 min | ~3-8 min | Not recommended |
+| CPU only | ~5-10 min | ~3-8 min | Not recommended |
+| Apple M1/M2/M3 (Metal) | ~15-30 sec | ~10-20 sec | ~30-60 min per coin |
 | Google Colab T4 | ~5-15 sec | ~3-10 sec | ~15-30 min per coin |
 | A100 GPU | ~2-5 sec | ~1-3 sec | ~5-10 min per coin |
 
-The LSTM with `recurrent_dropout > 0` requires GPU for the CuDNN kernel. On CPU, recurrent dropout forces a pure Python fallback that is orders of magnitude slower.
+**Apple Silicon Metal GPU Setup:**
+```bash
+# Requires Python 3.12 (tensorflow-metal does not support 3.13+)
+python3.12 -m venv tf-gpu-env
+source tf-gpu-env/bin/activate
+pip install tensorflow==2.18 tensorflow-metal
+pip install lightgbm optuna scikit-learn pandas pyarrow mlflow matplotlib seaborn
+
+# Verify GPU detection
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+Recurrent dropout is set to 0.0 to enable GPU-accelerated LSTM kernels on both CUDA and Metal backends.

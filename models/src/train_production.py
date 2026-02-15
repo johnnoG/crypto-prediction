@@ -73,6 +73,8 @@ logger = logging.getLogger(__name__)
 from models.enhanced_lstm import EnhancedLSTMForecaster
 from models.transformer_model import TransformerForecaster
 from models.lightgbm_model import LightGBMForecaster
+from models.dlinear_model import DLinearForecaster
+from models.tcn_model import TCNForecaster
 from models.advanced_ensemble import AdvancedEnsemble
 
 # Hyperparameter optimization (optional — requires optuna)
@@ -148,9 +150,11 @@ class TrainingConfig:
     sequence_length: int = 60
     epochs: int = 150
     batch_size: int = 64
-    max_features: int = 60
+    max_features: int = 80
 
-    # Ensemble toggle
+    # Model toggles
+    train_dlinear: bool = True
+    train_tcn: bool = True
     train_ensemble: bool = True
 
     # Output
@@ -193,13 +197,14 @@ class ProductionDataLoader:
     # -- public API ----------------------------------------------------------
 
     def load_and_prepare(self) -> Dict[str, Any]:
-        """Full pipeline: load → clean → select → scale → split → sequence."""
+        """Full pipeline: load → clean → cross-asset → split → select (train-only) → scale → sequence."""
         df = self._load_parquet()
         df = self._clean(df)
-        feature_cols = self._select_features(df)
-        self.feature_names = feature_cols
 
-        # Chronological split indices
+        # Cross-asset features: when training BTC, add key ETH features
+        df = self._add_cross_asset_features(df)
+
+        # Chronological split FIRST (before feature selection to prevent leakage)
         n = len(df)
         train_end = int(n * self.config.train_ratio)
         val_end = int(n * (self.config.train_ratio + self.config.val_ratio))
@@ -210,7 +215,11 @@ class ProductionDataLoader:
 
         logger.info(f"Split sizes — train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
 
-        # Scale (fit on train only)
+        # Feature selection on TRAINING data only (prevents data leakage)
+        feature_cols = self._select_features(train_df)
+        self.feature_names = feature_cols
+
+        # Scale features (fit on train only)
         self.feature_scaler = RobustScaler()
         self.target_scaler = RobustScaler()
 
@@ -218,13 +227,30 @@ class ProductionDataLoader:
         X_val = self.feature_scaler.transform(val_df[feature_cols].values)
         X_test = self.feature_scaler.transform(test_df[feature_cols].values)
 
+        # Raw close prices (for inverse transform and reporting)
         y_train_raw = train_df['close'].values
         y_val_raw = val_df['close'].values
         y_test_raw = test_df['close'].values
 
-        y_train = self.target_scaler.fit_transform(y_train_raw.reshape(-1, 1)).ravel()
-        y_val = self.target_scaler.transform(y_val_raw.reshape(-1, 1)).ravel()
-        y_test = self.target_scaler.transform(y_test_raw.reshape(-1, 1)).ravel()
+        # Use LOG-RETURNS as target instead of scaled absolute price.
+        # log(close_t / close_{t-1}) is stationary across bull/bear regimes,
+        # bounded variance, and comparable across coins.
+        # We still scale with RobustScaler for the combined array (col 0),
+        # but the underlying values are log-returns, not raw prices.
+        def _to_log_returns(prices: np.ndarray) -> np.ndarray:
+            """Convert price series to log-returns (first value = 0)."""
+            lr = np.zeros_like(prices)
+            lr[1:] = np.log(prices[1:] / prices[:-1])
+            return lr
+
+        y_train_lr = _to_log_returns(y_train_raw)
+        y_val_lr = _to_log_returns(y_val_raw)
+        y_test_lr = _to_log_returns(y_test_raw)
+
+        # Scale log-returns (fit on train only) — RobustScaler centers & scales
+        y_train = self.target_scaler.fit_transform(y_train_lr.reshape(-1, 1)).ravel()
+        y_val = self.target_scaler.transform(y_val_lr.reshape(-1, 1)).ravel()
+        y_test = self.target_scaler.transform(y_test_lr.reshape(-1, 1)).ravel()
 
         # Build combined arrays for prepare_sequences (target as col 0)
         combined_train = np.column_stack([y_train.reshape(-1, 1), X_train])
@@ -242,6 +268,7 @@ class ProductionDataLoader:
             'dates_train': train_df.index,
             'dates_val': val_df.index,
             'dates_test': test_df.index,
+            'target_type': 'log_return',
         }
 
     # -- internals -----------------------------------------------------------
@@ -274,15 +301,75 @@ class ProductionDataLoader:
         return df
 
     def _select_features(self, df: pd.DataFrame) -> List[str]:
-        """Select top features by absolute correlation with close."""
+        """Select top features by mutual information with close (train-only)."""
         if 'close' not in df.columns:
             raise ValueError("'close' column not found in data")
 
         candidates = [c for c in df.columns if c != 'close']
-        corrs = df[candidates].corrwith(df['close']).abs().sort_values(ascending=False)
-        selected = corrs.head(self.config.max_features).index.tolist()
-        logger.info(f"Selected {len(selected)} features (top correlation with close)")
+
+        # Use mutual information (captures nonlinear relationships, unlike Pearson)
+        X_candidates = df[candidates].values
+        y_target = df['close'].values
+
+        # Handle any remaining NaNs/infs for MI computation
+        mask = np.all(np.isfinite(X_candidates), axis=1) & np.isfinite(y_target)
+        X_clean = X_candidates[mask]
+        y_clean = y_target[mask]
+
+        mi_scores = mutual_info_regression(X_clean, y_clean, random_state=42)
+        mi_series = pd.Series(mi_scores, index=candidates).sort_values(ascending=False)
+        selected = mi_series.head(self.config.max_features).index.tolist()
+        logger.info(f"Selected {len(selected)} features (mutual information, train-only)")
         return selected
+
+    def _add_cross_asset_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """When training BTC, load ETH features and add key columns as cross-asset context.
+
+        This gives BTC models macro crypto-market signals (ETH often leads BTC moves).
+        For ETH training (or if ETH data is unavailable), returns df unchanged.
+        """
+        if self.config.crypto.upper() != 'BTC':
+            return df
+
+        # Try to load ETH features
+        cross_asset = 'ETH'
+        cross_path = Path(self.config.features_dir) / f"{cross_asset}_features.parquet"
+        if not cross_path.exists():
+            logger.info(f"  Cross-asset file not found ({cross_path}), skipping")
+            return df
+
+        try:
+            eth_df = pd.read_parquet(cross_path)
+
+            # Compute key ETH features
+            eth_close = eth_df['close'] if 'close' in eth_df.columns else None
+            if eth_close is None:
+                return df
+
+            cross_features = pd.DataFrame(index=eth_df.index)
+            cross_features['eth_return_1d'] = eth_close.pct_change(1)
+            cross_features['eth_return_7d'] = eth_close.pct_change(7)
+            cross_features['eth_return_30d'] = eth_close.pct_change(30)
+            if 'rsi_14' in eth_df.columns:
+                cross_features['eth_rsi_14'] = eth_df['rsi_14']
+            cross_features['eth_volatility_20d'] = eth_close.pct_change().rolling(20).std()
+
+            # ETH/BTC ratio trend (if BTC close is available)
+            if 'close' in df.columns:
+                # Align on index
+                ratio = eth_close.reindex(df.index) / df['close']
+                cross_features['eth_btc_ratio_sma'] = ratio.rolling(20, min_periods=1).mean()
+
+            # Join on index, forward-fill any gaps
+            cross_features = cross_features.reindex(df.index).ffill().fillna(0)
+            n_added = cross_features.shape[1]
+
+            df = pd.concat([df, cross_features], axis=1)
+            logger.info(f"  Added {n_added} cross-asset ({cross_asset}) features")
+        except Exception as e:
+            logger.warning(f"  Cross-asset feature loading failed: {e}")
+
+        return df
 
 
 # ---------------------------------------------------------------------------
@@ -298,36 +385,199 @@ class ProductionTrainer:
         self.results: Dict[str, Any] = {}
 
     def train_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Train LSTM, Transformer, LightGBM, and optionally Ensemble."""
+        """Train DLinear, TCN, LSTM, Transformer, LightGBM, and optionally Ensemble."""
+        step = 0
+        total = 3 + int(self.config.train_dlinear) + int(self.config.train_tcn) + int(self.config.train_ensemble)
+
+        # --- DLinear (simple linear baseline — train first) ---
+        if self.config.train_dlinear:
+            step += 1
+            logger.info("=" * 60)
+            logger.info(f"[{step}/{total}] Training DLinear...")
+            logger.info("=" * 60)
+            self.results['dlinear'] = self._train_dlinear(data)
+
+        # --- TCN ---
+        if self.config.train_tcn:
+            step += 1
+            logger.info("=" * 60)
+            logger.info(f"[{step}/{total}] Training TCN...")
+            logger.info("=" * 60)
+            self.results['tcn'] = self._train_tcn(data)
 
         # --- LSTM ---
+        step += 1
         logger.info("=" * 60)
-        logger.info("[1/4] Training Enhanced LSTM...")
+        logger.info(f"[{step}/{total}] Training Enhanced LSTM...")
         logger.info("=" * 60)
         self.results['lstm'] = self._train_lstm(data)
 
         # --- Transformer ---
+        step += 1
         logger.info("=" * 60)
-        logger.info("[2/4] Training Transformer...")
+        logger.info(f"[{step}/{total}] Training Transformer...")
         logger.info("=" * 60)
         self.results['transformer'] = self._train_transformer(data)
 
         # --- LightGBM ---
+        step += 1
         logger.info("=" * 60)
-        logger.info("[3/4] Training LightGBM...")
+        logger.info(f"[{step}/{total}] Training LightGBM...")
         logger.info("=" * 60)
         self.results['lightgbm'] = self._train_lightgbm(data)
 
         # --- Ensemble ---
         if self.config.train_ensemble:
+            step += 1
             logger.info("=" * 60)
-            logger.info("[4/4] Training Advanced Ensemble...")
+            logger.info(f"[{step}/{total}] Training Advanced Ensemble...")
             logger.info("=" * 60)
             self.results['ensemble'] = self._train_ensemble(data)
 
         return self.results
 
     # -- individual trainers -------------------------------------------------
+
+    @staticmethod
+    def _augment_sequences(X: np.ndarray, y, n_augments: int = 2):
+        """Data augmentation for deep learning: jittering + scaling.
+
+        Args:
+            X: sequences (n, seq_len, features)
+            y: targets — dict of arrays (multi-output) or ndarray
+            n_augments: number of augmented copies to create
+
+        Returns:
+            (X_aug, y_aug) with originals + augmented samples
+        """
+        aug_X = [X]
+        if isinstance(y, dict):
+            aug_y = {k: [v] for k, v in y.items()}
+        else:
+            aug_y = [y]
+
+        for _ in range(n_augments):
+            # Jittering: small Gaussian noise on features
+            noise = np.random.normal(0, 0.01, X.shape).astype(X.dtype)
+            # Scaling: per-sample random factor
+            scale = np.random.uniform(0.97, 1.03, (X.shape[0], 1, 1)).astype(X.dtype)
+            X_aug = X * scale + noise
+            aug_X.append(X_aug)
+
+            if isinstance(y, dict):
+                for k, v in y.items():
+                    aug_y[k].append(v.copy())
+            else:
+                aug_y.append(y.copy())
+
+        X_out = np.concatenate(aug_X, axis=0)
+        if isinstance(y, dict):
+            y_out = {k: np.concatenate(v, axis=0) for k, v in aug_y.items()}
+        else:
+            y_out = np.concatenate(aug_y, axis=0)
+
+        return X_out, y_out
+
+    def _train_dlinear(self, data: Dict) -> Dict[str, Any]:
+        artifact_dir = str(Path(self.config.artifacts_dir) / "dlinear")
+
+        dlinear_config = {
+            'sequence_length': self.config.sequence_length,
+            'n_features': data['combined_train'].shape[1],
+            'kernel_size': 25,
+            'dropout_rate': 0.1,
+            'learning_rate': 0.001,
+            'batch_size': self.config.batch_size,
+            'epochs': self.config.epochs,
+            'early_stopping_patience': 10,
+            'multi_step': [1, 7, 30],
+        }
+
+        # Apply tuned hyperparameters if available
+        if 'dlinear' in self.tuned_configs:
+            tuned = self.tuned_configs['dlinear']
+            for key in ('kernel_size', 'dropout_rate', 'learning_rate', 'batch_size'):
+                if key in tuned:
+                    dlinear_config[key] = tuned[key]
+            logger.info(f"  Applied tuned hyperparameters for DLinear: {list(tuned.keys())}")
+
+        model = DLinearForecaster(config=dlinear_config, model_dir=artifact_dir)
+
+        X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
+        X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
+        X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        t0 = time.time()
+        metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
+        train_time = time.time() - t0
+
+        history = model.training_history.history if model.training_history else {}
+        test_preds = model.model.predict(X_test_seq, verbose=0)
+
+        return {
+            'model': model,
+            'metrics': metrics,
+            'history': history,
+            'train_time': train_time,
+            'config': dlinear_config,
+            'X_test': X_test_seq,
+            'y_test': y_test_seq,
+            'test_preds': test_preds,
+        }
+
+    def _train_tcn(self, data: Dict) -> Dict[str, Any]:
+        artifact_dir = str(Path(self.config.artifacts_dir) / "tcn")
+
+        tcn_config = {
+            'sequence_length': self.config.sequence_length,
+            'n_features': data['combined_train'].shape[1],
+            'n_filters': 32,
+            'kernel_size': 3,
+            'n_blocks': 4,
+            'dropout_rate': 0.3,
+            'learning_rate': 0.001,
+            'batch_size': self.config.batch_size,
+            'epochs': self.config.epochs,
+            'early_stopping_patience': 10,
+            'multi_step': [1, 7, 30],
+        }
+
+        # Apply tuned hyperparameters if available
+        if 'tcn' in self.tuned_configs:
+            tuned = self.tuned_configs['tcn']
+            for key in ('n_filters', 'kernel_size', 'n_blocks', 'dropout_rate',
+                        'learning_rate', 'batch_size'):
+                if key in tuned:
+                    tcn_config[key] = tuned[key]
+            logger.info(f"  Applied tuned hyperparameters for TCN: {list(tuned.keys())}")
+
+        model = TCNForecaster(config=tcn_config, model_dir=artifact_dir)
+
+        X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
+        X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
+        X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        # Data augmentation (train only)
+        X_train_seq, y_train_seq = self._augment_sequences(X_train_seq, y_train_seq, n_augments=2)
+        logger.info(f"  TCN augmented train size: {len(X_train_seq)} sequences")
+
+        t0 = time.time()
+        metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
+        train_time = time.time() - t0
+
+        history = model.training_history.history if model.training_history else {}
+        test_preds = model.model.predict(X_test_seq, verbose=0)
+
+        return {
+            'model': model,
+            'metrics': metrics,
+            'history': history,
+            'train_time': train_time,
+            'config': tcn_config,
+            'X_test': X_test_seq,
+            'y_test': y_test_seq,
+            'test_preds': test_preds,
+        }
 
     def _train_lstm(self, data: Dict) -> Dict[str, Any]:
         seq_len = self.config.sequence_length
@@ -336,14 +586,14 @@ class ProductionTrainer:
         lstm_config = {
             'sequence_length': seq_len,
             'n_features': data['combined_train'].shape[1],
-            'lstm_units': [128, 64, 32],        # smaller to reduce overfitting
-            'dense_units': [64, 32],             # smaller dense head
-            'dropout_rate': 0.4,                 # higher dropout (was 0.25)
+            'lstm_units': [64, 32],              # 2 layers (was 3) — ~60% fewer params
+            'dense_units': [32],                  # single head (was [64,32])
+            'dropout_rate': 0.4,
             'recurrent_dropout': 0.0,            # must be 0 for CuDNN/Metal GPU kernels
-            'learning_rate': 0.0005,             # lower initial LR (was 0.001)
+            'learning_rate': 0.0005,
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
-            'early_stopping_patience': 20,
+            'early_stopping_patience': 10,       # tighter (was 20)
             'gradient_clip': 1.0,
             'use_bidirectional': True,
             'use_attention': True,
@@ -352,6 +602,7 @@ class ProductionTrainer:
             'multi_step': [1, 7, 30],
             'teacher_forcing_ratio': 0.5,
             'mc_samples': 100,
+            'l2_reg': 1e-4,                      # L2 regularization for LSTM/Dense layers
         }
 
         # Apply tuned hyperparameters if available
@@ -370,6 +621,10 @@ class ProductionTrainer:
         X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
         X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
         X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        # Data augmentation (train only) — triples effective dataset
+        X_train_seq, y_train_seq = self._augment_sequences(X_train_seq, y_train_seq, n_augments=2)
+        logger.info(f"  LSTM augmented train size: {len(X_train_seq)} sequences")
 
         t0 = time.time()
         metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
@@ -399,16 +654,17 @@ class ProductionTrainer:
         transformer_config = {
             'sequence_length': seq_len,
             'n_features': data['combined_train'].shape[1],
-            'd_model': 128,                      # smaller (was 256) — less overfitting
-            'num_heads': 4,                      # match d_model reduction (was 8)
-            'ff_dim': 512,                       # smaller (was 1024)
-            'num_layers': 3,                     # fewer layers (was 4)
-            'dropout_rate': 0.25,                # higher dropout (was 0.1)
+            'd_model': 64,                       # smaller (was 128) — fewer params
+            'num_heads': 4,
+            'ff_dim': 256,                       # smaller (was 512)
+            'num_layers': 2,                     # fewer layers (was 3)
+            'dropout_rate': 0.35,                # higher dropout (was 0.25)
             'learning_rate': 0.0001,
+            'weight_decay': 0.01,                # AdamW weight decay
             'batch_size': self.config.batch_size,
             'epochs': self.config.epochs,
-            'early_stopping_patience': 15,
-            'warmup_steps': 500,                 # faster warmup (was 1000) for ~115 steps/epoch
+            'early_stopping_patience': 10,       # tighter (was 15)
+            'warmup_steps': 500,
             'multi_step': [1, 7, 30],
             'use_causal_mask': True,
         }
@@ -427,6 +683,10 @@ class ProductionTrainer:
         X_train_seq, y_train_seq = model.prepare_sequences(data['combined_train'])
         X_val_seq, y_val_seq = model.prepare_sequences(data['combined_val'])
         X_test_seq, y_test_seq = model.prepare_sequences(data['combined_test'])
+
+        # Data augmentation (train only) — triples effective dataset
+        X_train_seq, y_train_seq = self._augment_sequences(X_train_seq, y_train_seq, n_augments=2)
+        logger.info(f"  Transformer augmented train size: {len(X_train_seq)} sequences")
 
         t0 = time.time()
         metrics = model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=1)
@@ -454,15 +714,15 @@ class ProductionTrainer:
             'objective': 'regression',
             'metric': 'mae',
             'boosting_type': 'gbdt',
-            'num_leaves': 127,
-            'max_depth': 8,
+            'num_leaves': 31,                    # tighter (was 127)
+            'max_depth': 5,                      # tighter (was 8)
             'learning_rate': 0.03,
             'feature_fraction': 0.85,
             'bagging_fraction': 0.8,
             'bagging_freq': 5,
-            'min_child_samples': 20,
-            'reg_alpha': 0.1,
-            'reg_lambda': 0.1,
+            'min_child_samples': 50,             # tighter (was 20)
+            'reg_alpha': 1.0,                    # stronger L1 (was 0.1)
+            'reg_lambda': 1.0,                   # stronger L2 (was 0.1)
             'verbose': -1,
             'random_state': 42,
             'n_estimators': 1000,
@@ -533,8 +793,13 @@ class ProductionTrainer:
         model = AdvancedEnsemble(config=ensemble_config, model_dir=artifact_dir)
 
         # Reuse already-trained models instead of training from scratch
-        # This saves hours of redundant training
         trained_models = []
+        if 'dlinear' in self.results:
+            model.dlinear = self.results['dlinear']['model']
+            trained_models.append('dlinear')
+        if 'tcn' in self.results:
+            model.tcn = self.results['tcn']['model']
+            trained_models.append('tcn')
         if 'transformer' in self.results:
             model.transformer = self.results['transformer']['model']
             trained_models.append('transformer')
@@ -683,7 +948,7 @@ def run_walk_forward_validation(
 
     wf_results = {}
 
-    for model_name in ('lstm', 'transformer', 'lightgbm'):
+    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm'):
         if model_name not in results:
             continue
 
@@ -728,7 +993,7 @@ def run_uncertainty_quantification(
     uq_results = {}
 
     # LSTM and Transformer: Monte Carlo dropout
-    for model_name in ('lstm', 'transformer'):
+    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
         if model_name not in results:
             continue
 
@@ -863,18 +1128,25 @@ class TrainingVisualizer:
     # -- 1. Loss Curves ------------------------------------------------------
 
     def _plot_loss_curves(self, results: Dict):
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        all_models = [m for m in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm') if m in results]
+        n_models = max(len(all_models), 1)
+        fig, axes = plt.subplots(1, n_models, figsize=(6 * n_models, 5))
+        if n_models == 1:
+            axes = [axes]
         fig.suptitle(f'{self.crypto} — Training & Validation Loss', fontsize=14, fontweight='bold')
 
-        for idx, (model_name, ax) in enumerate(zip(['lstm', 'transformer', 'lightgbm'], axes)):
-            if model_name not in results:
-                ax.set_visible(False)
-                continue
-
+        for ax, model_name in zip(axes, all_models):
             r = results[model_name]
             h = r.get('history', {})
 
-            if model_name in ('lstm', 'transformer'):
+            if model_name == 'lightgbm':
+                train_mae = h.get('train_mae', [])
+                val_mae = h.get('val_mae', [])
+                if train_mae:
+                    ax.plot(range(1, len(train_mae) + 1), train_mae, label='Train MAE', linewidth=2)
+                if val_mae:
+                    ax.plot(range(1, len(val_mae) + 1), val_mae, label='Val MAE', linewidth=2, linestyle='--')
+            else:
                 loss = h.get('loss', [])
                 val_loss = h.get('val_loss', [])
                 if loss:
@@ -882,14 +1154,6 @@ class TrainingVisualizer:
                     ax.plot(epochs, loss, label='Train Loss', linewidth=2)
                 if val_loss:
                     ax.plot(epochs, val_loss, label='Val Loss', linewidth=2, linestyle='--')
-            else:
-                # LightGBM: history has train_mae / val_mae lists
-                train_mae = h.get('train_mae', [])
-                val_mae = h.get('val_mae', [])
-                if train_mae:
-                    ax.plot(range(1, len(train_mae) + 1), train_mae, label='Train MAE', linewidth=2)
-                if val_mae:
-                    ax.plot(range(1, len(val_mae) + 1), val_mae, label='Val MAE', linewidth=2, linestyle='--')
 
             ax.set_title(model_name.upper())
             ax.set_xlabel('Epoch / Round')
@@ -915,7 +1179,7 @@ class TrainingVisualizer:
 
         for ax, (train_key, val_key, title) in zip(axes.flat, metric_pairs):
             has_data = False
-            for model_name in ('lstm', 'transformer'):
+            for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
                 if model_name not in results:
                     continue
                 h = results[model_name].get('history', {})
@@ -944,7 +1208,7 @@ class TrainingVisualizer:
         ax.set_title(f'{self.crypto} — Learning Rate Schedules', fontsize=14, fontweight='bold')
 
         has_data = False
-        for model_name in ('lstm', 'transformer'):
+        for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
             if model_name not in results:
                 continue
             h = results[model_name].get('history', {})
@@ -1050,7 +1314,7 @@ class TrainingVisualizer:
     def _plot_model_comparison(self, results: Dict):
         """Bar chart comparing RMSE/MAE across models and horizons."""
         horizons = ['1d', '7d', '30d']
-        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+        model_names = [m for m in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm') if m in results]
 
         if not model_names:
             return
@@ -1106,7 +1370,7 @@ class TrainingVisualizer:
 
         for ax, metric in zip(axes, ['rmse', 'mae']):
             x = np.arange(len(horizons))
-            width = 0.25
+            width = 0.8 / max(len(model_names), 1)
             for i, model_name in enumerate(model_names):
                 vals = [comparison[model_name].get(h, {}).get(metric, 0) for h in horizons]
                 ax.bar(x + i * width, vals, width, label=model_name.upper(), alpha=0.85)
@@ -1123,7 +1387,7 @@ class TrainingVisualizer:
     # -- 7. Prediction vs Actual ---------------------------------------------
 
     def _plot_predictions_vs_actual(self, results: Dict):
-        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+        model_names = [m for m in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm') if m in results]
         n_models = len(model_names)
         if n_models == 0:
             return
@@ -1200,7 +1464,7 @@ class TrainingVisualizer:
     # -- 8. Residual Analysis ------------------------------------------------
 
     def _plot_residual_analysis(self, results: Dict):
-        model_names = [m for m in ('lstm', 'transformer', 'lightgbm') if m in results]
+        model_names = [m for m in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm') if m in results]
         if not model_names:
             return
 
@@ -1269,7 +1533,7 @@ class TrainingVisualizer:
     # -- 10. Training Summary ------------------------------------------------
 
     def _plot_training_summary(self, results: Dict):
-        model_names = [m for m in ('lstm', 'transformer', 'lightgbm', 'ensemble') if m in results]
+        model_names = [m for m in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm', 'ensemble') if m in results]
         if not model_names:
             return
 
@@ -1289,7 +1553,7 @@ class TrainingVisualizer:
 
         # Panel 2: Final training loss (LSTM & Transformer)
         ax = axes[0, 1]
-        for model_name in ('lstm', 'transformer'):
+        for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
             if model_name not in results:
                 continue
             h = results[model_name].get('history', {})
@@ -1309,7 +1573,7 @@ class TrainingVisualizer:
         ax = axes[1, 0]
         rmse_vals = []
         rmse_names = []
-        for model_name in ('lstm', 'transformer', 'lightgbm'):
+        for model_name in ('dlinear', 'tcn', 'lstm', 'transformer', 'lightgbm'):
             if model_name not in results:
                 continue
             r = results[model_name]
@@ -1333,7 +1597,7 @@ class TrainingVisualizer:
         ax = axes[1, 1]
         epoch_info = []
         epoch_names = []
-        for model_name in ('lstm', 'transformer'):
+        for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
             if model_name not in results:
                 continue
             h = results[model_name].get('history', {})
@@ -1362,19 +1626,13 @@ def save_models(results: Dict[str, Any], config: TrainingConfig):
     """Save all trained models to artifacts directory."""
     logger.info("Saving models...")
 
-    if 'lstm' in results:
-        try:
-            results['lstm']['model'].save_model("production")
-            logger.info("  Saved LSTM model")
-        except Exception as e:
-            logger.warning(f"  Failed to save LSTM: {e}")
-
-    if 'transformer' in results:
-        try:
-            results['transformer']['model'].save_model("production")
-            logger.info("  Saved Transformer model")
-        except Exception as e:
-            logger.warning(f"  Failed to save Transformer: {e}")
+    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
+        if model_name in results:
+            try:
+                results[model_name]['model'].save_model("production")
+                logger.info(f"  Saved {model_name} model")
+            except Exception as e:
+                logger.warning(f"  Failed to save {model_name}: {e}")
 
     if 'lightgbm' in results:
         try:
@@ -1596,7 +1854,7 @@ def log_to_mlflow(
             # Advanced MLflow features
             if config.advanced_mlflow:
                 # Interactive training curves
-                for model_name in ('lstm', 'transformer'):
+                for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
                     if model_name in results:
                         history = results[model_name].get('history', {})
                         if history and hasattr(manager, 'log_training_curves'):
@@ -1788,6 +2046,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--seq-length", type=int, default=60)
     parser.add_argument("--max-features", type=int, default=50)
+    parser.add_argument("--no-dlinear", action="store_true",
+                        help="Skip DLinear model training")
+    parser.add_argument("--no-tcn", action="store_true",
+                        help="Skip TCN model training")
     parser.add_argument("--no-ensemble", action="store_true",
                         help="Skip ensemble training")
     parser.add_argument("--output-dir", type=str,
@@ -1832,6 +2094,8 @@ def main():
             batch_size=args.batch_size,
             sequence_length=args.seq_length,
             max_features=args.max_features,
+            train_dlinear=not args.no_dlinear,
+            train_tcn=not args.no_tcn,
             train_ensemble=not args.no_ensemble,
             output_dir=args.output_dir,
             tune=args.tune,

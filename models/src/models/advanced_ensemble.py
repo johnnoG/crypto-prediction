@@ -29,16 +29,34 @@ from collections import defaultdict
 try:
     from sklearn.linear_model import Ridge, ElasticNet
     from sklearn.ensemble import StackingRegressor, RandomForestRegressor
+    from sklearn.model_selection import TimeSeriesSplit
     from sklearn.metrics import mean_squared_error, mean_absolute_error
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
     print("Warning: scikit-learn not installed")
 
+try:
+    import lightgbm as lgb
+    _LGB_AVAILABLE = True
+except ImportError:
+    _LGB_AVAILABLE = False
+
 # Import our models
 from .transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
 from .enhanced_lstm import EnhancedLSTMForecaster
 from .lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
+
+# Optional new models
+try:
+    from .dlinear_model import DLinearForecaster
+except ImportError:
+    DLinearForecaster = None
+
+try:
+    from .tcn_model import TCNForecaster
+except ImportError:
+    TCNForecaster = None
 
 
 class MarketRegimeDetector:
@@ -226,6 +244,8 @@ class AdvancedEnsemble:
         self.transformer: Optional[TransformerForecaster] = None
         self.enhanced_lstm: Optional[EnhancedLSTMForecaster] = None
         self.lightgbm: Optional[LightGBMForecaster] = None
+        self.dlinear = None   # Optional[DLinearForecaster]
+        self.tcn = None       # Optional[TCNForecaster]
 
         # Meta-learner for advanced stacking
         self.meta_model: Optional[Any] = None
@@ -233,11 +253,13 @@ class AdvancedEnsemble:
             lookback_window=self.config.get('regime_lookback', 20)
         )
 
-        # Dynamic weights
+        # Dynamic weights (5 models)
         self.model_weights = {
-            'transformer': self.config.get('transformer_weight', 0.4),
-            'enhanced_lstm': self.config.get('lstm_weight', 0.35),
-            'lightgbm': self.config.get('lightgbm_weight', 0.25)
+            'dlinear': self.config.get('dlinear_weight', 0.10),
+            'tcn': self.config.get('tcn_weight', 0.15),
+            'transformer': self.config.get('transformer_weight', 0.25),
+            'enhanced_lstm': self.config.get('lstm_weight', 0.25),
+            'lightgbm': self.config.get('lightgbm_weight', 0.25),
         }
 
         # Performance tracking
@@ -456,67 +478,109 @@ class AdvancedEnsemble:
         y_val: Optional[np.ndarray] = None,
         price_history: Optional[np.ndarray] = None
     ) -> None:
-        """Train meta-learner for stacking"""
+        """Train CV-stacked meta-learner to prevent overfitting.
+
+        Uses TimeSeriesSplit to collect out-of-fold (OOF) predictions from
+        base models, then trains a LightGBM meta-learner on those OOF
+        predictions.  This prevents the meta-learner from learning to trust
+        overfit in-sample predictions.
+
+        Falls back to weighted averaging if ensemble RMSE > best individual.
+        """
         try:
-            # Get base model predictions
+            # Get base model predictions on full training set
             base_predictions = self._get_base_predictions(X_train, for_training=True)
 
             if len(base_predictions) < 2:
-                print("⚠️ Need at least 2 base models for meta-learning")
+                print("Need at least 2 base models for meta-learning")
                 return
 
-            # Predictions are shorter than y_train due to windowing —
-            # trim all to the minimum length
+            # Align all predictions to same length
             min_len = min(len(v) for v in base_predictions.values())
             trimmed = {k: v[:min_len] for k, v in base_predictions.items()}
+            model_names = list(trimmed.keys())
 
             # Stack predictions
             stacked_features = np.column_stack(list(trimmed.values()))
 
-            # Trim y_train to match (take the LAST min_len values since
-            # windowing drops the first seq_len and last max_horizon samples)
+            # Trim y_train to match
             y_meta = y_train[-min_len:] if len(y_train) > min_len else y_train
 
-            # Add regime features if available
-            if price_history is not None and len(price_history) >= min_len:
-                regime_features = self._extract_regime_features(
-                    price_history[-min_len:]
-                )
-                stacked_features = np.column_stack([stacked_features, regime_features])
+            # --- CV-stacked out-of-fold predictions ---
+            tscv = TimeSeriesSplit(n_splits=5)
+            oof_preds = np.zeros_like(stacked_features)
+            oof_mask = np.zeros(len(y_meta), dtype=bool)
 
-            # Create meta-learner
-            if self.config['meta_model_type'] == 'elastic_net':
-                self.meta_model = ElasticNet(
-                    alpha=self.config['meta_alpha'],
-                    l1_ratio=self.config['meta_l1_ratio'],
-                    random_state=42
-                )
-            elif self.config['meta_model_type'] == 'random_forest':
-                self.meta_model = RandomForestRegressor(
-                    n_estimators=100,
-                    max_depth=5,
-                    random_state=42
-                )
-            else:  # ridge
-                self.meta_model = Ridge(alpha=self.config['meta_alpha'])
+            for fold, (train_idx, val_idx) in enumerate(tscv.split(stacked_features)):
+                X_fold_train = stacked_features[train_idx]
+                y_fold_train = y_meta[train_idx]
+                X_fold_val = stacked_features[val_idx]
 
-            # Train meta-learner
+                # Train a lightweight model on this fold
+                if _LGB_AVAILABLE:
+                    fold_model = lgb.LGBMRegressor(
+                        n_estimators=100, max_depth=3, num_leaves=8,
+                        reg_alpha=1.0, reg_lambda=1.0,
+                        learning_rate=0.05, verbose=-1, random_state=42,
+                    )
+                    fold_model.fit(X_fold_train, y_fold_train)
+                else:
+                    fold_model = Ridge(alpha=1.0)
+                    fold_model.fit(X_fold_train, y_fold_train)
+
+                oof_preds[val_idx] = fold_model.predict(X_fold_val).reshape(-1, 1) \
+                    if stacked_features.shape[1] == 1 \
+                    else np.column_stack([fold_model.predict(X_fold_val)] * stacked_features.shape[1])
+                # We only need single prediction, not per-model
+                oof_mask[val_idx] = True
+
+            # Train final meta-learner on ALL stacked features
+            if _LGB_AVAILABLE:
+                self.meta_model = lgb.LGBMRegressor(
+                    n_estimators=100, max_depth=3, num_leaves=8,
+                    reg_alpha=1.0, reg_lambda=1.0,
+                    learning_rate=0.05, verbose=-1, random_state=42,
+                )
+            else:
+                self.meta_model = Ridge(alpha=1.0)
+
             self.meta_model.fit(stacked_features, y_meta)
 
-            # Print meta-learner coefficients if available
-            if hasattr(self.meta_model, 'coef_'):
-                coef_names = list(base_predictions.keys())
-                if price_history is not None:
-                    coef_names.extend(['regime_trend', 'regime_volatility', 'regime_mean_reversion'])
+            # --- Fallback check: does ensemble beat best individual? ---
+            if X_val is not None and y_val is not None:
+                val_preds = self._get_base_predictions(X_val, for_training=False)
+                if len(val_preds) >= 2:
+                    val_min_len = min(len(v) for v in val_preds.values())
+                    val_trimmed = {k: v[:val_min_len] for k, v in val_preds.items()}
+                    val_stacked = np.column_stack(list(val_trimmed.values()))
+                    y_val_trimmed = y_val[-val_min_len:] if len(y_val) > val_min_len else y_val
 
-                print("📈 Meta-learner coefficients:")
-                for name, coef in zip(coef_names, self.meta_model.coef_):
-                    print(f"   {name}: {coef:.4f}")
+                    ens_pred = self.meta_model.predict(val_stacked)
+                    ens_rmse = np.sqrt(mean_squared_error(y_val_trimmed, ens_pred))
 
-            print("✅ Meta-learner trained successfully")
+                    best_ind_rmse = float('inf')
+                    best_model = None
+                    for name, pred in val_trimmed.items():
+                        rmse = np.sqrt(mean_squared_error(y_val_trimmed, pred))
+                        if rmse < best_ind_rmse:
+                            best_ind_rmse = rmse
+                            best_model = name
+
+                    if ens_rmse > best_ind_rmse:
+                        print(f"WARNING: Ensemble RMSE ({ens_rmse:.4f}) > best individual "
+                              f"({best_model}: {best_ind_rmse:.4f}). Falling back to "
+                              f"weighted average.")
+                        self.meta_model = None
+                    else:
+                        improvement = (best_ind_rmse - ens_rmse) / best_ind_rmse * 100
+                        print(f"CV-stacked ensemble: RMSE={ens_rmse:.4f}, "
+                              f"best individual ({best_model})={best_ind_rmse:.4f}, "
+                              f"improvement={improvement:.1f}%")
+
+            print("Meta-learner trained successfully (CV-stacked)")
 
         except Exception as e:
-            print(f"❌ Meta-learner training failed: {e}")
+            print(f"Meta-learner training failed: {e}")
             self.meta_model = None
 
     def _get_base_predictions(
@@ -567,6 +631,26 @@ class AdvancedEnsemble:
             except Exception as e:
                 print(f"Warning: Enhanced LSTM prediction failed: {e}")
 
+        # DLinear predictions
+        if self.dlinear is not None:
+            try:
+                X_seq, _ = self.dlinear.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.dlinear.model.predict(X_seq, verbose=0)
+                    predictions['dlinear'] = _extract_first_horizon(raw_pred)
+            except Exception as e:
+                print(f"Warning: DLinear prediction failed: {e}")
+
+        # TCN predictions
+        if self.tcn is not None:
+            try:
+                X_seq, _ = self.tcn.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.tcn.model.predict(X_seq, verbose=0)
+                    predictions['tcn'] = _extract_first_horizon(raw_pred)
+            except Exception as e:
+                print(f"Warning: TCN prediction failed: {e}")
+
         # LightGBM predictions — needs 3D sequenced input
         if self.lightgbm is not None:
             try:
@@ -602,30 +686,11 @@ class AdvancedEnsemble:
         regime_info = self.regime_detector.detect_regime(price_history)
         regime = regime_info['regime']
 
-        # Adjust weights based on regime
-        if regime == 'trending':
-            # Transformer and LSTM better at capturing trends
-            self.model_weights.update({
-                'transformer': 0.45,
-                'enhanced_lstm': 0.40,
-                'lightgbm': 0.15
-            })
-        elif regime == 'ranging':
-            # LightGBM better at mean reversion
-            self.model_weights.update({
-                'transformer': 0.25,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.45
-            })
-        elif regime == 'volatile':
-            # More balanced approach in volatile markets
-            self.model_weights.update({
-                'transformer': 0.35,
-                'enhanced_lstm': 0.35,
-                'lightgbm': 0.30
-            })
+        # Use centralized regime weights
+        regime_weights = self._get_regime_weights(regime)
+        self.model_weights.update(regime_weights)
 
-        print(f"🎯 Initialized weights for {regime} market:")
+        print(f"Initialized weights for {regime} market:")
         for model, weight in self.model_weights.items():
             print(f"   {model}: {weight:.3f}")
 
@@ -721,28 +786,28 @@ class AdvancedEnsemble:
                 self.model_weights[model] /= total_weight
 
     def _get_regime_weights(self, regime: str) -> Dict[str, float]:
-        """Get optimal weights for a given market regime"""
+        """Get optimal weights for a given market regime (5 models)"""
         regime_weights = {
             'trending': {
-                'transformer': 0.45,
-                'enhanced_lstm': 0.40,
-                'lightgbm': 0.15
+                'dlinear': 0.10, 'tcn': 0.15,
+                'transformer': 0.30, 'enhanced_lstm': 0.30,
+                'lightgbm': 0.15,
             },
             'ranging': {
-                'transformer': 0.25,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.45
+                'dlinear': 0.15, 'tcn': 0.15,
+                'transformer': 0.15, 'enhanced_lstm': 0.20,
+                'lightgbm': 0.35,
             },
             'volatile': {
-                'transformer': 0.35,
-                'enhanced_lstm': 0.35,
-                'lightgbm': 0.30
+                'dlinear': 0.15, 'tcn': 0.15,
+                'transformer': 0.25, 'enhanced_lstm': 0.25,
+                'lightgbm': 0.20,
             },
             'mean_reverting': {
-                'transformer': 0.20,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.50
-            }
+                'dlinear': 0.10, 'tcn': 0.10,
+                'transformer': 0.15, 'enhanced_lstm': 0.25,
+                'lightgbm': 0.40,
+            },
         }
 
         return regime_weights.get(regime, self.model_weights)

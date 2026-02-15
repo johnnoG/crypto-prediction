@@ -6,7 +6,7 @@ Production-grade cryptocurrency price prediction system combining deep learning,
 
 An end-to-end ML pipeline and web application for multi-horizon cryptocurrency price forecasting:
 
-- **Three Model Architectures** — Bidirectional LSTM with attention, Transformer with causal masking, and LightGBM gradient boosting, combined through an intelligent ensemble with market regime detection
+- **Five Model Architectures** — DLinear baseline, Temporal Convolutional Network (TCN), Bidirectional LSTM with attention, Transformer with causal masking, and LightGBM gradient boosting, combined through a CV-stacked ensemble with market regime detection
 - **150+ Engineered Features** — Technical indicators, momentum oscillators, volatility metrics, volume analysis, and statistical features for 104 cryptocurrencies
 - **Production Training Pipeline** — Automated training with chronological splits, RobustScaler preprocessing, multi-step forecasting (1/7/30 day horizons), and 10 diagnostic visualizations per training run
 - **MLflow Experiment Tracking** — Full experiment logging with model versioning, metric tracking, and artifact management
@@ -31,20 +31,19 @@ docker-compose up -d
 ### Train Models (GPU recommended: Colab T4/A100 or Apple Silicon with Metal)
 
 ```bash
-# Full production training for BTC and ETH
-python models/src/train_production.py --crypto BTC,ETH
+# Full production training for BTC and ETH (5 models + ensemble)
+python3 models/src/train_production.py --crypto BTC,ETH
 
 # Quick validation run
-python models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
+python3 models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
 
-# With Optuna hyperparameter tuning (20 trials per model)
-python models/src/train_production.py --crypto BTC --tune --tune-trials 20
+# With Optuna hyperparameter tuning (all 5 models)
+python3 models/src/train_production.py --crypto BTC --tune --tune-trials 20 \
+    --tune-models dlinear,tcn,lstm,transformer,lightgbm
 
-# Tune LightGBM only (fast) + walk-forward validation
-python models/src/train_production.py --crypto BTC --tune --tune-models lightgbm --walk-forward
-
-# Full professional pipeline
-python models/src/train_production.py --crypto BTC --tune --walk-forward --epochs 150
+# Full professional pipeline (tuning + walk-forward + both coins)
+python3 models/src/train_production.py --crypto BTC,ETH --tune --tune-trials 20 \
+    --tune-models dlinear,tcn,lstm,transformer,lightgbm --walk-forward --epochs 150
 ```
 
 Training outputs:
@@ -77,10 +76,12 @@ crypto-prediction/
 │   │   └── advanced_ensemble/
 │   └── src/
 │       ├── models/                   # Model implementations
-│       │   ├── enhanced_lstm.py      # Bidirectional LSTM + attention + residual
+│       │   ├── dlinear_model.py      # DLinear trend/seasonal decomposition baseline
+│       │   ├── tcn_model.py          # Temporal Convolutional Network (dilated causal)
+│       │   ├── enhanced_lstm.py      # Bidirectional LSTM + attention + residual + L2
 │       │   ├── transformer_model.py  # Multi-head self-attention transformer
-│       │   ├── lightgbm_model.py     # Gradient boosting forecaster
-│       │   └── advanced_ensemble.py  # Ensemble with regime detection
+│       │   ├── lightgbm_model.py     # Gradient boosting with summary statistics
+│       │   └── advanced_ensemble.py  # CV-stacked ensemble with regime detection
 │       ├── training/                 # Training infrastructure
 │       │   ├── hyperopt_pipeline.py  # Optuna hyperparameter optimization
 │       │   ├── production_pipeline.py # End-to-end training pipeline
@@ -137,30 +138,29 @@ crypto-prediction/
 Raw Parquet Data (5600+ rows, 150+ features per crypto)
     |
     v
-Data Cleaning --> Feature Selection (top 60 by correlation)
+Chronological Split --> Feature Selection (top 80 by mutual info, train only)
     |
     v
-RobustScaler (fit on train only)
+Cross-Asset Features (ETH indicators for BTC) --> Log-Return Targets
     |
     v
-Chronological Split: 70% train / 15% val / 15% test
+RobustScaler (fit on train only) --> Data Augmentation (jitter + scale, 3x)
     |
     v
 Sliding Window Sequences (60 days lookback)
     |
     v
-+------------------+--------------------+------------------+
-|   Enhanced LSTM  |    Transformer     |    LightGBM      |
-| Bidirectional    | Multi-head         | Gradient boosted  |
-| Attention + Res  | Self-attention     | Decision trees   |
-| Optuna-tuned     | Optuna-tuned       | Optuna-tuned     |
-+------------------+--------------------+------------------+
-    |                    |                    |
-    v                    v                    v
-+--------------------------------------------------------+
-|            Advanced Ensemble                            |
-|  Market regime detection + Meta-learner + Online adapt  |
-+--------------------------------------------------------+
++---------+--------+------------------+--------------------+------------------+
+| DLinear |  TCN   |   Enhanced LSTM  |    Transformer     |    LightGBM      |
+| Trend/  | Causal | Bidirectional    | Multi-head         | Summary stats    |
+| Seasonal| Conv   | Attention + L2   | Self-attention     | (5 per feature)  |
++---------+--------+------------------+--------------------+------------------+
+    |         |          |                    |                    |
+    v         v          v                    v                    v
++--------------------------------------------------------------------+
+|               CV-Stacked Ensemble (5 models)                       |
+|  OOF meta-learner + Market regime detection + Online adaptation    |
++--------------------------------------------------------------------+
     |
     v
 Multi-Horizon Predictions: 1-day, 7-day, 30-day
@@ -194,7 +194,7 @@ Each training run generates 10 diagnostic plots:
 
 | Component | Technology |
 |-----------|------------|
-| Deep Learning | TensorFlow/Keras (LSTM, Transformer) |
+| Deep Learning | TensorFlow/Keras (DLinear, TCN, LSTM, Transformer) |
 | Gradient Boosting | LightGBM, XGBoost |
 | Hyperparameter Tuning | Optuna (Bayesian optimization) |
 | Experiment Tracking | MLflow (logging, model registry) |
@@ -317,22 +317,11 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 ### Completed
 
 - **Phase 1: Data Analysis** — 104 cryptocurrencies analyzed, 150+ features engineered, statistical analysis (PCA, clustering, risk metrics), professional visualizations
-- **Phase 2: ML Models** — LSTM, Transformer, LightGBM, and Ensemble models fully implemented with multi-step forecasting, attention mechanisms, and uncertainty quantification
+- **Phase 2: ML Models** — DLinear, TCN, LSTM, Transformer, LightGBM, and CV-stacked Ensemble (5 models) with multi-step forecasting, log-return targets, data augmentation, cross-asset features, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
-- **BTC & ETH Production Training** — Full Optuna tuning (LSTM + Transformer + LightGBM, 10 trials each), MC dropout uncertainty, ensemble evaluation, 10 diagnostic visualizations per run
-
-### Latest Training Results (Feb 2026, Optuna-Tuned)
-
-| Crypto | Best Model | Test RMSE (1d) | Val RMSE (1d) | Val MAE (1d) | Ensemble RMSE |
-|--------|------------|----------------|---------------|--------------|---------------|
-| ETH | LightGBM | **0.110** | 0.209 | 0.083 | 0.379 (-2.5%) |
-| BTC | LightGBM | **5.982** | 2.962 | 0.928 | 8.952 (-45.7%) |
-
-- ETH is near production-ready — all 3 models generalize well, ensemble within 2.5% of best
-- BTC remains challenging — deep models overfit (2.7x), LightGBM dominates test set
-- LightGBM trains in ~8 seconds and outperforms 15-minute deep models on both coins
-- Full results and analysis in [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md#training-results-feb-2026-optuna-tuned)
+- **BTC & ETH Production Training** — 5 model architectures (DLinear, TCN, LSTM, Transformer, LightGBM), Optuna tuning, CV-stacked ensemble, MC dropout uncertainty, cross-asset features, 10 diagnostic visualizations per run
+- **BTC Overfitting Fixes** — Log-return targets, mutual information feature selection (train-only), reduced model capacity, L2 regularization, data augmentation, summary statistics for LightGBM, CV-stacked ensemble meta-learner
 
 ### In Progress
 

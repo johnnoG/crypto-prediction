@@ -59,6 +59,8 @@ except ImportError:
     from models.transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
     from models.enhanced_lstm import EnhancedLSTMForecaster
     from models.lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
+    from models.dlinear_model import DLinearForecaster
+    from models.tcn_model import TCNForecaster
     from models.advanced_ensemble import AdvancedEnsemble
     from training.mlflow_integration import MLflowExperimentTracker
 
@@ -100,13 +102,13 @@ class OptimizationObjective:
 
     def _validate_model_type(self) -> None:
         """Validate that model type is supported"""
-        supported_models = ['transformer', 'lstm', 'lightgbm', 'ensemble']
+        supported_models = ['transformer', 'lstm', 'lightgbm', 'ensemble', 'dlinear', 'tcn']
 
         if self.model_type not in supported_models:
             raise ValueError(f"Unsupported model type: {self.model_type}")
 
         # Check availability
-        if self.model_type in ['transformer', 'lstm'] and not TENSORFLOW_AVAILABLE:
+        if self.model_type in ['transformer', 'lstm', 'dlinear', 'tcn'] and not TENSORFLOW_AVAILABLE:
             raise RuntimeError(f"TensorFlow not available for {self.model_type}")
 
         if self.model_type == 'lightgbm' and not LIGHTGBM_AVAILABLE:
@@ -141,6 +143,10 @@ class OptimizationObjective:
                 config = self._suggest_lstm_params(trial)
             elif self.model_type == 'lightgbm':
                 config = self._suggest_lightgbm_params(trial)
+            elif self.model_type == 'dlinear':
+                config = self._suggest_dlinear_params(trial)
+            elif self.model_type == 'tcn':
+                config = self._suggest_tcn_params(trial)
             elif self.model_type == 'ensemble':
                 config = self._suggest_ensemble_params(trial)
             else:
@@ -248,6 +254,36 @@ class OptimizationObjective:
             'verbose': -1
         }
 
+    def _suggest_dlinear_params(self, trial: optuna.Trial) -> Dict[str, Any]:
+        """Suggest hyperparameters for DLinear model"""
+        return {
+            'sequence_length': 60,
+            'n_features': self.X_train.shape[1],
+            'multi_step': [1, 7, 30],
+            'kernel_size': trial.suggest_int('kernel_size', 15, 35),
+            'dropout_rate': trial.suggest_float('dropout_rate', 0.05, 0.3),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True),
+            'batch_size': trial.suggest_categorical('batch_size', [32, 64]),
+            'epochs': 30,
+            'early_stopping_patience': 10,
+        }
+
+    def _suggest_tcn_params(self, trial: optuna.Trial) -> Dict[str, Any]:
+        """Suggest hyperparameters for TCN model"""
+        return {
+            'sequence_length': 60,
+            'n_features': self.X_train.shape[1],
+            'multi_step': [1, 7, 30],
+            'n_filters': trial.suggest_categorical('n_filters', [16, 32, 64]),
+            'kernel_size': trial.suggest_int('kernel_size', 2, 5),
+            'n_blocks': trial.suggest_int('n_blocks', 3, 6),
+            'dropout_rate': trial.suggest_float('dropout_rate', 0.1, 0.4),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-4, 1e-2, log=True),
+            'batch_size': trial.suggest_categorical('batch_size', [32, 64]),
+            'epochs': 30,
+            'early_stopping_patience': 10,
+        }
+
     def _suggest_ensemble_params(self, trial: optuna.Trial) -> Dict[str, Any]:
         """Suggest hyperparameters for Ensemble model"""
         return {
@@ -332,6 +368,10 @@ class OptimizationObjective:
             return self._evaluate_lstm(config, X_train, y_train, X_val, y_val)
         elif self.model_type == 'lightgbm':
             return self._evaluate_lightgbm(config, X_train, y_train, X_val, y_val)
+        elif self.model_type == 'dlinear':
+            return self._evaluate_dlinear(config, X_train, y_train, X_val, y_val)
+        elif self.model_type == 'tcn':
+            return self._evaluate_tcn(config, X_train, y_train, X_val, y_val)
         elif self.model_type == 'ensemble':
             return self._evaluate_ensemble(config, X_train, y_train, X_val, y_val)
         else:
@@ -429,6 +469,60 @@ class OptimizationObjective:
             pred = pred[:, 0]
 
         return self._calculate_score(y_val_multi[:, 0], pred)
+
+    def _evaluate_dlinear(self, config, X_train, y_train, X_val, y_val) -> float:
+        """Evaluate DLinear model"""
+        try:
+            model = DLinearForecaster(config=config)
+
+            train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
+            val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
+
+            X_train_seq, y_train_seq = model.prepare_sequences(train_data)
+            X_val_seq, y_val_seq = model.prepare_sequences(val_data)
+
+            if len(X_train_seq) == 0 or len(X_val_seq) == 0:
+                return float('inf')
+
+            model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
+
+            raw_pred = model.model.predict(X_val_seq, verbose=0)
+            pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+            return self._calculate_score(y_true, pred)
+        finally:
+            try:
+                import keras
+                keras.backend.clear_session()
+            except Exception:
+                pass
+            gc.collect()
+
+    def _evaluate_tcn(self, config, X_train, y_train, X_val, y_val) -> float:
+        """Evaluate TCN model"""
+        try:
+            model = TCNForecaster(config=config)
+
+            train_data = np.column_stack([y_train.reshape(-1, 1), X_train])
+            val_data = np.column_stack([y_val.reshape(-1, 1), X_val])
+
+            X_train_seq, y_train_seq = model.prepare_sequences(train_data)
+            X_val_seq, y_val_seq = model.prepare_sequences(val_data)
+
+            if len(X_train_seq) == 0 or len(X_val_seq) == 0:
+                return float('inf')
+
+            model.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq, verbose=0)
+
+            raw_pred = model.model.predict(X_val_seq, verbose=0)
+            pred, y_true = self._extract_first_horizon(raw_pred, y_val_seq)
+            return self._calculate_score(y_true, pred)
+        finally:
+            try:
+                import keras
+                keras.backend.clear_session()
+            except Exception:
+                pass
+            gc.collect()
 
     def _evaluate_ensemble(self, config, X_train, y_train, X_val, y_val) -> float:
         """Evaluate Ensemble model"""

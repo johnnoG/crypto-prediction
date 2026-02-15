@@ -79,22 +79,41 @@ class LightGBMForecaster:
 
     def _prepare_features(self, X: np.ndarray) -> np.ndarray:
         """
-        Prepare features for LightGBM (flatten sequences)
+        Prepare features for LightGBM using summary statistics.
+
+        Instead of flattening the full sequence (60 x n_features = thousands of
+        columns), extract 5 summary statistics per feature. This reduces the
+        feature count by ~12x and prevents overfitting when samples < features.
 
         Args:
             X: Input sequences of shape (n_samples, sequence_length, n_features)
 
         Returns:
-            Flattened features of shape (n_samples, sequence_length * n_features)
+            Summary features of shape (n_samples, n_features * 5)
         """
         if len(X.shape) == 3:
-            # Flatten sequence data for traditional ML
             n_samples, seq_len, n_features = X.shape
-            X_flat = X.reshape(n_samples, seq_len * n_features)
+
+            last_step = X[:, -1, :]                                          # most recent
+            means = X.mean(axis=1)                                           # window average
+            stds = X.std(axis=1)                                             # window volatility
+            trends = X[:, -1, :] - X[:, 0, :]                               # window trend
+            # Recent momentum: last 5 avg - previous 5 avg
+            if seq_len >= 10:
+                momentum = X[:, -5:, :].mean(axis=1) - X[:, -10:-5, :].mean(axis=1)
+            else:
+                momentum = np.zeros_like(last_step)
+
+            X_flat = np.hstack([last_step, means, stds, trends, momentum])
 
             # Create feature names if not set
             if not self.feature_names:
-                self.feature_names = [f'feature_{i}_{j}' for i in range(seq_len) for j in range(n_features)]
+                suffixes = ['last', 'mean', 'std', 'trend', 'momentum']
+                self.feature_names = [
+                    f'f{j}_{suffix}'
+                    for suffix in suffixes
+                    for j in range(n_features)
+                ]
 
             return X_flat
         return X

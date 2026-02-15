@@ -39,6 +39,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
+from sklearn.feature_selection import mutual_info_regression
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Add current directory to path for imports
@@ -1395,6 +1396,39 @@ def save_models(results: Dict[str, Any], config: TrainingConfig):
 # Training Report
 # ---------------------------------------------------------------------------
 
+def _extract_horizon_standalone(y_test, test_preds, horizon_label, idx):
+    """Extract (y_true, y_pred) arrays for a given horizon from model outputs."""
+    if isinstance(y_test, dict):
+        key = f'output_{horizon_label}'
+        if key not in y_test:
+            return None, None
+        y_true = np.asarray(y_test[key]).flatten()
+        if isinstance(test_preds, dict):
+            y_pred_raw = test_preds.get(key)
+            if y_pred_raw is None:
+                return None, None
+            y_pred = np.asarray(y_pred_raw).flatten()
+        else:
+            pred_list = test_preds if isinstance(test_preds, list) else [test_preds]
+            if idx < len(pred_list):
+                y_pred = np.asarray(pred_list[idx]).flatten()
+            else:
+                return None, None
+    elif isinstance(y_test, np.ndarray) and y_test.ndim == 2:
+        if idx >= y_test.shape[1]:
+            return None, None
+        y_true = y_test[:, idx]
+        preds = test_preds if isinstance(test_preds, np.ndarray) else np.array(test_preds)
+        if preds.ndim == 1:
+            preds = preds.reshape(-1, 1)
+        if idx >= preds.shape[1]:
+            return None, None
+        y_pred = preds[:, idx]
+    else:
+        return None, None
+    return y_true, y_pred
+
+
 def generate_report(
     results: Dict[str, Any],
     config: TrainingConfig,
@@ -1439,6 +1473,24 @@ def generate_report(
                     # LightGBM stores per-horizon metrics as lists
                     clean_metrics[k] = v
             entry['metrics'] = clean_metrics
+
+        # Directional accuracy: % of timesteps where predicted direction matches actual
+        y_test = r.get('y_test')
+        test_preds = r.get('test_preds')
+        if y_test is not None and test_preds is not None:
+            dir_acc = {}
+            for idx, horizon in enumerate(['1d', '7d', '30d']):
+                y_true, y_pred = _extract_horizon_standalone(y_test, test_preds, horizon, idx)
+                if y_true is not None and y_pred is not None and len(y_true) > 1:
+                    n = min(len(y_true), len(y_pred))
+                    actual_dir = np.sign(np.diff(y_true[:n]))
+                    pred_dir = np.sign(np.diff(y_pred[:n]))
+                    mask = actual_dir != 0  # exclude flat days
+                    if mask.sum() > 0:
+                        dir_acc[horizon] = float(np.mean(actual_dir[mask] == pred_dir[mask]))
+            if dir_acc:
+                entry['directional_accuracy'] = dir_acc
+
         report['models'][model_name] = entry
 
     # Hyperparameter tuning results
@@ -1699,6 +1751,12 @@ def train_single_crypto(config: TrainingConfig):
             ensemble_eval=ensemble_eval,
             tuning_results=tuning_results,
         )
+        # Log directional accuracy summary
+        for model_name, model_info in report.get('models', {}).items():
+            da = model_info.get('directional_accuracy')
+            if da:
+                parts = [f"{h}: {v:.1%}" for h, v in da.items()]
+                logger.info(f"  {model_name} directional accuracy — {', '.join(parts)}")
     except Exception as e:
         logger.warning(f"Report generation failed (models already saved): {e}")
 

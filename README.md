@@ -153,7 +153,7 @@ Sliding Window Sequences (60 days lookback)
 |   Enhanced LSTM  |    Transformer     |    LightGBM      |
 | Bidirectional    | Multi-head         | Gradient boosted  |
 | Attention + Res  | Self-attention     | Decision trees   |
-| [128, 64, 32]    | d=128, 4 heads     | Optuna-tuned     |
+| Optuna-tuned     | Optuna-tuned       | Optuna-tuned     |
 +------------------+--------------------+------------------+
     |                    |                    |
     v                    v                    v
@@ -320,18 +320,23 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Phase 2: ML Models** — LSTM, Transformer, LightGBM, and Ensemble models fully implemented with multi-step forecasting, attention mechanisms, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
-- **BTC & ETH Production Training** — Full pipeline with Optuna LightGBM tuning, MC dropout uncertainty, ensemble evaluation, 10 diagnostic visualizations per run
+- **BTC & ETH Production Training** — Full Optuna tuning (LSTM + Transformer + LightGBM, 10 trials each), MC dropout uncertainty, ensemble evaluation, 10 diagnostic visualizations per run
 
-### Latest Training Results (Feb 2026)
+### Latest Training Results (Feb 2026, Optuna-Tuned)
 
-| Crypto | Best Model | Test RMSE (1d) | Val RMSE (1d) | Notes |
-|--------|------------|----------------|---------------|-------|
-| ETH | LightGBM | 0.13 | 0.10 MAE | Near production-ready, all models generalize well |
-| BTC | LightGBM | 5.81 | 0.88 MAE | Harder target — higher variance, more regime changes |
+| Crypto | Best Model | Test RMSE (1d) | Val RMSE (1d) | Val MAE (1d) | Ensemble RMSE |
+|--------|------------|----------------|---------------|--------------|---------------|
+| ETH | LightGBM | **0.110** | 0.209 | 0.083 | 0.379 (-2.5%) |
+| BTC | LightGBM | **5.982** | 2.962 | 0.928 | 8.952 (-45.7%) |
+
+- ETH is near production-ready — all 3 models generalize well, ensemble within 2.5% of best
+- BTC remains challenging — deep models overfit (2.7x), LightGBM dominates test set
+- LightGBM trains in ~8 seconds and outperforms 15-minute deep models on both coins
+- Full results and analysis in [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md#training-results-feb-2026-optuna-tuned)
 
 ### In Progress
 
-- Expanding training to top-20 coins by data availability (LTC, XRP, DOGE, BNB, SOL, etc.)
+- Expanding training to top-20 coins by data availability (LTC, XRP, DOGE, BNB, SOL, ADA, LINK, DOT)
 - WebSocket streaming integration in frontend
 - Advanced analytics dashboard with live predictions
 

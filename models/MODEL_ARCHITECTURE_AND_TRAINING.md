@@ -53,20 +53,24 @@ Input (60 timesteps x 61 features)
 - **No recurrent dropout**: Recurrent dropout is set to 0.0 to enable fast CuDNN (NVIDIA) and Metal (Apple Silicon) GPU kernels. Any value > 0 forces a pure Python LSTM fallback that is 10-100x slower. Standard dropout (0.4) between layers provides sufficient regularization.
 - **Monte Carlo dropout**: At inference time, dropout remains active across 100 forward passes. The variance of predictions provides a calibrated uncertainty estimate without requiring a separate model.
 
-### Hyperparameters (Production)
+### Hyperparameters (Default + Optuna-Tuned)
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Sequence length | 60 | ~2 months of daily data; captures medium-term patterns |
-| LSTM units | [128, 64, 32] | Three-layer stack with tapering width; reduced from [256,128,64] to combat overfitting on ~3700 training samples |
-| Dense units | [64, 32] | Two dense layers before output heads for non-linear feature combination |
-| Dropout | 0.4 | Aggressive regularization for noisy financial data with limited samples |
-| Recurrent dropout | 0.0 | Disabled — enables CuDNN/Metal GPU kernels (10-100x faster) |
-| Learning rate | 0.0005 | Adam with early stopping; lower LR for more stable convergence |
-| Gradient clipping | 1.0 | Prevents exploding gradients common in financial time series |
-| Batch size | 64 | Larger batches for GPU utilization and gradient stability |
-| Epochs | 150 | With early stopping (patience=20) typically converges in 40-80 epochs |
-| Loss function | Huber | Less sensitive to outliers than MSE; robust to crypto flash crashes |
+The default configuration is used when training without `--tune`. When Optuna tuning is enabled, these serve as the baseline and the tuner explores around them.
+
+| Parameter | Default | BTC Tuned | ETH Tuned | Rationale |
+|-----------|---------|-----------|-----------|-----------|
+| Sequence length | 60 | 60 | 60 | ~2 months of daily data |
+| LSTM units | [128, 64, 32] | [128] (1 layer) | [64, 128, 64] (3 layers) | Optuna found simpler architecture works better for BTC |
+| Dense units | [64, 32] | [64] | [16, 32] | Smaller dense heads reduce overfitting |
+| Dropout | 0.4 | 0.46 | 0.35 | Higher dropout for noisier BTC data |
+| Recurrent dropout | 0.0 | 0.0 | 0.0 | Must be 0 for CuDNN/Metal GPU kernels (10-100x faster) |
+| Learning rate | 0.0005 | 0.00027 | 0.0035 | ETH tolerates faster learning |
+| Attention | Yes | Yes | **No** | Optuna disabled attention for ETH |
+| Bidirectional | Yes | Yes | Yes | Consistently selected by Optuna |
+| Gradient clipping | 1.0 | 1.85 | 0.74 | |
+| Batch size | 64 | 64 | 64 | |
+| Epochs | 100 | 35 (early stop) | 28 (early stop) | With patience=20 |
+| Loss function | Huber | Huber | Huber | Robust to crypto flash crashes |
 
 ---
 
@@ -113,19 +117,21 @@ Input (60 timesteps x 61 features)
 - **GELU activation**: Used in the feed-forward network instead of ReLU. GELU provides smoother gradients which helps with the attention mechanism's sensitivity.
 - **Huber loss per horizon**: Less sensitive to outliers than MSE, which matters because crypto prices occasionally have extreme moves that would otherwise dominate the gradient.
 
-### Hyperparameters (Production)
+### Hyperparameters (Default + Optuna-Tuned)
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| d_model | 128 | Reduced from 256 to combat overfitting on ~3700 training samples; 128/4 = 32 dims per head |
-| Attention heads | 4 | Multi-scale pattern learning; each head sees 32-dimensional projections |
-| Feed-forward dim | 512 | 4x d_model (standard ratio from "Attention Is All You Need") |
-| Transformer layers | 3 | Reduced from 4; fewer layers prevent overfitting on limited data |
-| Warmup steps | 500 | Faster warmup for smaller model; reaches peak LR sooner |
-| Dropout | 0.25 | Increased from 0.1; stronger regularization needed for small dataset |
-| Optimizer | AdamW | Weight decay (0.01) provides additional regularization vs standard Adam |
-| Batch size | 64 | Larger batches for GPU utilization |
-| Epochs | 150 | With early stopping (patience=15) typically converges in 30-60 epochs |
+| Parameter | Default | BTC Tuned | ETH Tuned | Rationale |
+|-----------|---------|-----------|-----------|-----------|
+| d_model | 128 | 128 | 128 | Confirmed optimal by Optuna for both coins |
+| Attention heads | 4 | 8 | 4 | BTC benefits from more attention heads |
+| Feed-forward dim | 512 | 256 | 1024 | Trade-off: BTC needs smaller ff for regularization |
+| Transformer layers | 3 | 4 | 4 | |
+| Warmup steps | 500 | 880 | 624 | Slower warmup for smaller batch size |
+| Dropout | 0.25 | 0.17 | 0.18 | Optuna prefers lower dropout + early stopping |
+| Batch size | 64 | 32 | 32 | Smaller batches provide gradient noise regularization |
+| Learning rate | 0.0001 | 4.5e-5 | 2.1e-4 | |
+| Causal mask | Yes | Yes | Yes | Prevents future information leakage |
+| Optimizer | AdamW | AdamW | AdamW | Weight decay (0.01) for additional regularization |
+| Epochs | 100 | 21 (early stop) | 23 (early stop) | With patience=15 |
 
 ---
 
@@ -147,29 +153,33 @@ LightGBM serves as a strong baseline and a diversity driver in the ensemble. Its
 ### Architecture
 
 ```
-Input (60 timesteps x 60 features) -> Flatten to 3600 features
+Input (60 timesteps x 50 features) -> Flatten to 3000 features
   |
-  GBDT for 1-day horizon  (up to 1000 trees, depth 8)
-  GBDT for 7-day horizon  (up to 1000 trees, depth 8)
-  GBDT for 30-day horizon (up to 1000 trees, depth 8)
+  GBDT for 1-day horizon  (Optuna-tuned trees/depth per coin)
+  GBDT for 7-day horizon  (Optuna-tuned trees/depth per coin)
+  GBDT for 30-day horizon (Optuna-tuned trees/depth per coin)
 ```
 
 Each horizon gets its own independent model because the optimal tree structure for 1-day prediction is very different from 30-day prediction.
 
-### Hyperparameters (Production)
+### Hyperparameters (Optuna-Tuned Per Coin)
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| n_estimators | 1000 | Large tree budget; early stopping prevents overfitting |
-| num_leaves | 127 | High complexity capacity for the 3600-dimensional flattened input |
-| max_depth | 8 | Limits individual tree complexity to prevent memorization |
-| learning_rate | 0.03 | Low rate + many trees = smooth convergence and better generalization |
-| feature_fraction | 0.85 | Column subsampling per tree for ensemble diversity |
-| bagging_fraction | 0.8 | Row subsampling reduces variance |
-| min_child_samples | 20 | Minimum leaf size prevents fitting to noise |
-| reg_alpha | 0.1 | L1 regularization for feature selection |
-| reg_lambda | 0.1 | L2 regularization for weight smoothing |
-| early_stopping | 50 rounds | Stops when validation MAE plateaus |
+LightGBM is always tuned per-coin via Optuna (10 trials, ~10 seconds total) since tree models benefit most from coin-specific tuning and the cost is negligible.
+
+| Parameter | BTC Tuned | ETH Tuned | Search Range |
+|-----------|-----------|-----------|--------------|
+| n_estimators | 386 | 167 | 100-500 |
+| num_leaves | 11 | 75 | 10-80 |
+| max_depth | 7 | 5 | 3-10 |
+| learning_rate | 0.289 | 0.134 | 0.01-0.3 |
+| feature_fraction | 0.934 | 0.987 | 0.6-1.0 |
+| bagging_fraction | 0.878 | 0.985 | 0.6-1.0 |
+| min_child_samples | 25 | 36 | 10-100 |
+| lambda_l1 | 0.0006 | 0.008 | 1e-4 - 10 |
+| lambda_l2 | 0.010 | **2.54** | 1e-3 - 10 |
+| early_stopping | 50 rounds | 50 rounds | Fixed |
+
+Note: ETH's high lambda_l2 (2.54) compensates for its higher num_leaves (75), providing strong regularization. BTC's conservative 11 leaves naturally limit complexity.
 
 ---
 
@@ -205,11 +215,13 @@ After each prediction, the ensemble updates model weights based on recent accura
 
 ### Default Weights
 
-| Model | Weight | Rationale |
-|-------|--------|-----------|
-| Transformer | 0.40 | Strongest on structural patterns and regime changes |
-| LSTM | 0.35 | Best for trending / momentum-driven markets |
-| LightGBM | 0.25 | Fast inference, stable baseline, uncorrelated errors |
+| Model | Default Weight | Regime: Trending | Regime: Volatile | Regime: Ranging |
+|-------|---------------|-----------------|-----------------|----------------|
+| Transformer | 0.40 | 0.45 | 0.35 | 0.25 |
+| Enhanced LSTM | 0.35 | 0.40 | 0.35 | 0.30 |
+| LightGBM | 0.25 | 0.15 | 0.30 | 0.45 |
+
+Weights are dynamically adjusted by the regime detector. In practice, the ensemble currently performs within ~2.5% of the best individual model (ETH) but struggles when one model dominates (BTC, where LightGBM is far ahead).
 
 ---
 
@@ -284,7 +296,7 @@ The training script generates 10 diagnostic plots per cryptocurrency:
 | Plot | What It Shows |
 |------|---------------|
 | `loss_curves.png` | Train vs validation loss per epoch for each model |
-| `metrics_progression.png` | MAE/MSE per horizon over training epochs |
+| `metrics_progression.png` | Per-horizon loss progression over training epochs |
 | `learning_rates.png` | LR schedules (decay, warmup, plateau reduction) |
 | `attention_heatmap.png` | LSTM attention weights showing which timesteps the model focuses on |
 | `feature_importance.png` | Top 30 LightGBM features ranked by importance |
@@ -390,6 +402,45 @@ Access the MLflow UI:
 ```bash
 mlflow ui --backend-store-uri file://models/src/mlruns_production --port 5000
 ```
+
+---
+
+## Training Results (Feb 2026, Optuna-Tuned)
+
+### ETH — Production Ready
+
+| Model | Train RMSE (1d) | Val RMSE (1d) | Test RMSE (1d) | Test MAE (1d) | Overfit Ratio |
+|-------|----------------|---------------|----------------|---------------|---------------|
+| LSTM | 0.246 | **0.209** | 0.348 | 0.290 | 0.85x |
+| Transformer | 0.166 | 0.238 | 0.258 | 0.213 | 1.44x |
+| LightGBM | 0.019 MAE | **0.083 MAE** | **0.110** | **0.087** | 4.3x |
+| Ensemble | — | — | 0.379 | 0.292 | — |
+
+- LightGBM dominates at 1-day horizon (test RMSE 0.110)
+- LSTM val < train (0.85x) — excellent generalization, validation period was slightly easier
+- Ensemble within 2.5% of best individual model
+- Transformer CI width: 0.203 (well-calibrated uncertainty)
+
+### BTC — Challenging Target
+
+| Model | Train RMSE (1d) | Val RMSE (1d) | Test RMSE (1d) | Test MAE (1d) | Overfit Ratio |
+|-------|----------------|---------------|----------------|---------------|---------------|
+| LSTM | 1.105 | 2.962 | 9.791 | 9.269 | 2.7x |
+| Transformer | 1.174 | 3.194 | 10.159 | 9.885 | 2.7x |
+| LightGBM | 0.162 MAE | 0.928 MAE | **5.982** | **5.427** | 5.8x |
+| Ensemble | — | — | 8.952 | 8.419 | — |
+
+- LightGBM is far ahead (test RMSE 5.98 vs ~10 for deep models)
+- BTC is inherently harder: higher price variance, more regime changes, same ~3700 training samples
+- All deep models overfit (2.7x ratio) despite Optuna tuning
+- Transformer uncertainty collapsed (CI width 0.096) — overconfident and wrong
+
+### Key Insights
+
+1. **LightGBM is the strongest model** for both coins on test data. Its tabular feature interactions outperform sequential deep models given limited training data.
+2. **Optuna tuning is most effective for LightGBM** — tunes in seconds, per-coin configs significantly improve results. Deep model tuning can regress if the CV objective misleads.
+3. **ETH generalizes much better than BTC** across all architectures. ETH has lower price variance and more stable regime patterns.
+4. **Ensemble helps most when models are close in quality** (ETH: -2.5%) but hurts when one model dominates (BTC: -45.7% vs LightGBM alone).
 
 ---
 

@@ -27,6 +27,7 @@ Usage:
 import os
 import sys
 import argparse
+import gc
 import logging
 import json
 import time
@@ -384,6 +385,18 @@ class ProductionTrainer:
         self.tuned_configs = tuned_configs or {}
         self.results: Dict[str, Any] = {}
 
+    @staticmethod
+    def _cleanup_keras_memory(label: str = ""):
+        """Free Keras/TF GPU and CPU memory between model trainings."""
+        try:
+            from tensorflow import keras
+            keras.backend.clear_session()
+        except Exception:
+            pass
+        gc.collect()
+        if label:
+            logger.info(f"  Memory cleanup after {label}")
+
     def train_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Train DLinear, TCN, LSTM, Transformer, LightGBM, and optionally Ensemble."""
         step = 0
@@ -396,6 +409,7 @@ class ProductionTrainer:
             logger.info(f"[{step}/{total}] Training DLinear...")
             logger.info("=" * 60)
             self.results['dlinear'] = self._train_dlinear(data)
+            self._cleanup_keras_memory("DLinear")
 
         # --- TCN ---
         if self.config.train_tcn:
@@ -404,6 +418,7 @@ class ProductionTrainer:
             logger.info(f"[{step}/{total}] Training TCN...")
             logger.info("=" * 60)
             self.results['tcn'] = self._train_tcn(data)
+            self._cleanup_keras_memory("TCN")
 
         # --- LSTM ---
         step += 1
@@ -411,6 +426,7 @@ class ProductionTrainer:
         logger.info(f"[{step}/{total}] Training Enhanced LSTM...")
         logger.info("=" * 60)
         self.results['lstm'] = self._train_lstm(data)
+        self._cleanup_keras_memory("LSTM")
 
         # --- Transformer ---
         step += 1
@@ -418,6 +434,7 @@ class ProductionTrainer:
         logger.info(f"[{step}/{total}] Training Transformer...")
         logger.info("=" * 60)
         self.results['transformer'] = self._train_transformer(data)
+        self._cleanup_keras_memory("Transformer")
 
         # --- LightGBM ---
         step += 1
@@ -909,6 +926,16 @@ def run_hyperparameter_tuning(
             logger.warning(f"  Tuning failed for {model_type}: {e}")
 
     logger.info(f"\n  Tuning complete. Tuned models: {list(tuned_configs.keys())}")
+
+    # Free tuning memory before production training
+    del optimizer
+    try:
+        from tensorflow import keras
+        keras.backend.clear_session()
+    except Exception:
+        pass
+    gc.collect()
+
     return tuned_configs
 
 
@@ -1042,6 +1069,7 @@ def run_uncertainty_quantification(
         except Exception as e:
             logger.warning(f"  Uncertainty failed for lightgbm: {e}")
 
+    gc.collect()
     return uq_results
 
 
@@ -1990,6 +2018,34 @@ def train_single_crypto(config: TrainingConfig):
     # 7. Save models FIRST (never lose trained weights to a viz crash)
     save_models(results, config)
 
+    # 7b. Free Keras model graphs and large arrays — weights are saved,
+    #     only need history/metrics/config/test_preds for viz and reporting.
+    #     Attention heatmap (needs live model) will be skipped gracefully.
+    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
+        if model_name in results and 'model' in results[model_name]:
+            keras_model = getattr(results[model_name]['model'], 'model', None)
+            if keras_model is not None:
+                del keras_model
+                results[model_name]['model'].model = None
+        # Free X_test (only needed by UQ which already ran)
+        if model_name in results:
+            results[model_name].pop('X_test', None)
+    if 'lightgbm' in results:
+        results['lightgbm'].pop('X_test', None)
+    # Also free ensemble's references to sub-models
+    if 'ensemble' in results and 'model' in results['ensemble']:
+        ens = results['ensemble']['model']
+        for attr in ('dlinear', 'tcn', 'transformer', 'enhanced_lstm', 'lightgbm'):
+            if hasattr(ens, attr):
+                setattr(ens, attr, None)
+    try:
+        from tensorflow import keras
+        keras.backend.clear_session()
+    except Exception:
+        pass
+    gc.collect()
+    logger.info("Freed Keras model memory after save (weights persisted)")
+
     # 8. Generate visualizations (non-fatal — wrapped in try/except)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     viz_dir = Path(config.output_dir) / f"{config.crypto}_{timestamp}"
@@ -2121,6 +2177,19 @@ def main():
             logger.error(f"Training failed for {crypto}: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            # Free all model memory before next crypto
+            try:
+                del results
+            except NameError:
+                pass
+            try:
+                from tensorflow import keras
+                keras.backend.clear_session()
+            except Exception:
+                pass
+            gc.collect()
+            logger.info(f"Memory cleanup after {crypto} complete")
 
 
 if __name__ == "__main__":

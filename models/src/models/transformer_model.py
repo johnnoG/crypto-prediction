@@ -30,6 +30,20 @@ except ImportError:
     print("Warning: TensorFlow not installed. Install with: pip install tensorflow")
 
 
+class MCDropout(layers.Dropout):
+    """Dropout that always applies, enabling Monte Carlo inference.
+
+    Used in output heads so each MC forward pass gets a different mask,
+    regardless of TF-Metal training flag propagation issues.
+    """
+
+    def call(self, inputs, training=None):
+        return super().call(inputs, training=True)
+
+    def get_config(self):
+        return super().get_config()
+
+
 class PositionalEncoding(layers.Layer):
     """
     Positional encoding layer for time series Transformer.
@@ -266,7 +280,7 @@ class TransformerForecaster:
 
         # Positional encoding
         x = PositionalEncoding(seq_len, self.config['d_model'])(x)
-        x = layers.Dropout(self.config['dropout_rate'])(x)
+        x = layers.Dropout(self.config['dropout_rate'], name='pos_enc_dropout')(x)
 
         # Transformer blocks
         for i in range(self.config['num_layers']):
@@ -288,7 +302,7 @@ class TransformerForecaster:
                 128, activation='relu',
                 name=f'dense_{horizon}d'
             )(x)
-            output = layers.Dropout(self.config['dropout_rate'])(output)
+            output = MCDropout(self.config['dropout_rate'], name=f'mc_dropout_{horizon}d')(output)
             output = layers.Dense(
                 1, name=f'output_{horizon}d'
             )(output)
@@ -562,9 +576,11 @@ class TransformerForecaster:
 
         if return_confidence:
             # Monte Carlo dropout for uncertainty estimation
+            # MCDropout layers always apply dropout, so training flag doesn't matter
+            X_tensor = tf.constant(X, dtype=tf.float32)
             confidence_predictions = []
             for _ in range(num_simulations):
-                pred = self.model(X, training=True)  # Enable dropout
+                pred = self.model(X_tensor, training=True)
                 if isinstance(pred, list):
                     pred = [p.numpy().flatten() for p in pred]
                 else:
@@ -646,7 +662,8 @@ class TransformerForecaster:
         custom_objects = {
             'PositionalEncoding': PositionalEncoding,
             'MultiHeadSelfAttention': MultiHeadSelfAttention,
-            'TransformerBlock': TransformerBlock
+            'TransformerBlock': TransformerBlock,
+            'MCDropout': MCDropout,
         }
 
         self.model = keras.models.load_model(model_path, custom_objects=custom_objects)

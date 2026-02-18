@@ -249,6 +249,8 @@ class AdvancedEnsemble:
 
         # Meta-learner for advanced stacking
         self.meta_model: Optional[Any] = None
+        self.meta_model_names: List[str] = []
+        self._weights_from_validation = False  # True when inverse-RMSE weights set
         self.regime_detector = MarketRegimeDetector(
             lookback_window=self.config.get('regime_lookback', 20)
         )
@@ -478,109 +480,124 @@ class AdvancedEnsemble:
         y_val: Optional[np.ndarray] = None,
         price_history: Optional[np.ndarray] = None
     ) -> None:
-        """Train CV-stacked meta-learner to prevent overfitting.
+        """Train meta-learner on validation set predictions.
 
-        Uses TimeSeriesSplit to collect out-of-fold (OOF) predictions from
-        base models, then trains a LightGBM meta-learner on those OOF
-        predictions.  This prevents the meta-learner from learning to trust
-        overfit in-sample predictions.
+        Base models were trained on X_train only, so their predictions on
+        X_val are genuinely out-of-sample.  We train the meta-learner on
+        these validation predictions and cross-validate with TimeSeriesSplit
+        to get an unbiased ensemble evaluation.
 
         Falls back to weighted averaging if ensemble RMSE > best individual.
         """
         try:
-            # Get base model predictions on full training set
-            base_predictions = self._get_base_predictions(X_train, for_training=True)
+            if X_val is None or y_val is None:
+                print("Need validation data for meta-learner training")
+                return
 
-            if len(base_predictions) < 2:
+            # Get base predictions on VALIDATION data (genuinely out-of-sample)
+            val_preds = self._get_base_predictions(X_val, for_training=False)
+
+            if len(val_preds) < 2:
                 print("Need at least 2 base models for meta-learning")
                 return
 
             # Align all predictions to same length
-            min_len = min(len(v) for v in base_predictions.values())
-            trimmed = {k: v[:min_len] for k, v in base_predictions.items()}
-            model_names = list(trimmed.keys())
+            min_len = min(len(v) for v in val_preds.values())
+            trimmed = {k: v[:min_len] for k, v in val_preds.items()}
+            self.meta_model_names = list(trimmed.keys())
+            val_stacked = np.column_stack(list(trimmed.values()))
 
-            # Stack predictions
-            stacked_features = np.column_stack(list(trimmed.values()))
+            # Align y_val to match prediction length — predictions correspond
+            # to the END of the data (windowing drops the first seq_len samples)
+            y_meta = y_val[-min_len:] if len(y_val) >= min_len else y_val
+            n = min(len(y_meta), val_stacked.shape[0])
+            val_stacked = val_stacked[:n]
+            y_meta = y_meta[:n]
 
-            # Trim y_train to match
-            y_meta = y_train[-min_len:] if len(y_train) > min_len else y_train
+            # --- Cross-validate meta-learner on validation predictions ---
+            tscv = TimeSeriesSplit(n_splits=3)
+            oof_ens = np.full(n, np.nan)
 
-            # --- CV-stacked out-of-fold predictions ---
-            tscv = TimeSeriesSplit(n_splits=5)
-            oof_preds = np.zeros_like(stacked_features)
-            oof_mask = np.zeros(len(y_meta), dtype=bool)
-
-            for fold, (train_idx, val_idx) in enumerate(tscv.split(stacked_features)):
-                X_fold_train = stacked_features[train_idx]
-                y_fold_train = y_meta[train_idx]
-                X_fold_val = stacked_features[val_idx]
-
-                # Train a lightweight model on this fold
+            for train_idx, test_idx in tscv.split(val_stacked):
                 if _LGB_AVAILABLE:
                     fold_model = lgb.LGBMRegressor(
                         n_estimators=100, max_depth=3, num_leaves=8,
                         reg_alpha=1.0, reg_lambda=1.0,
                         learning_rate=0.05, verbose=-1, random_state=42,
                     )
-                    fold_model.fit(X_fold_train, y_fold_train)
                 else:
                     fold_model = Ridge(alpha=1.0)
-                    fold_model.fit(X_fold_train, y_fold_train)
+                fold_model.fit(val_stacked[train_idx], y_meta[train_idx])
+                oof_ens[test_idx] = fold_model.predict(val_stacked[test_idx])
 
-                oof_preds[val_idx] = fold_model.predict(X_fold_val).reshape(-1, 1) \
-                    if stacked_features.shape[1] == 1 \
-                    else np.column_stack([fold_model.predict(X_fold_val)] * stacked_features.shape[1])
-                # We only need single prediction, not per-model
-                oof_mask[val_idx] = True
+            # Evaluate OOF ensemble vs individual models
+            valid = ~np.isnan(oof_ens)
+            if valid.sum() < 10:
+                print("Not enough OOF samples for reliable evaluation")
+                return
 
-            # Train final meta-learner on ALL stacked features
-            if _LGB_AVAILABLE:
-                self.meta_model = lgb.LGBMRegressor(
-                    n_estimators=100, max_depth=3, num_leaves=8,
-                    reg_alpha=1.0, reg_lambda=1.0,
-                    learning_rate=0.05, verbose=-1, random_state=42,
-                )
+            ens_rmse = np.sqrt(mean_squared_error(y_meta[valid], oof_ens[valid]))
+
+            best_ind_rmse = float('inf')
+            best_model = None
+            model_rmses = {}
+            for name, pred in trimmed.items():
+                rmse = np.sqrt(mean_squared_error(y_meta[valid], pred[:n][valid]))
+                model_rmses[name] = rmse
+                if rmse < best_ind_rmse:
+                    best_ind_rmse = rmse
+                    best_model = name
+
+            # Set performance-based weights: exclude models > 2x best RMSE,
+            # then use inverse-squared-RMSE for sharper differentiation
+            rmse_threshold = best_ind_rmse * 2.0
+            eligible = {k: v for k, v in model_rmses.items()
+                        if v <= rmse_threshold}
+            if not eligible:
+                eligible = {best_model: best_ind_rmse}
+
+            inv_sq = {k: 1.0 / max(v ** 2, 1e-16) for k, v in eligible.items()}
+            total_inv = sum(inv_sq.values())
+            perf_weights = {k: v / total_inv for k, v in inv_sq.items()}
+            # Zero out excluded models AND models not evaluated
+            for k in list(self.model_weights.keys()):
+                if k not in eligible:
+                    perf_weights[k] = 0.0
+            self.model_weights.update(perf_weights)
+            self._weights_from_validation = True
+            print(f"Performance-based weights (inverse-sq-RMSE, threshold={rmse_threshold:.3f}):")
+            for name, w in sorted(perf_weights.items(), key=lambda x: -x[1]):
+                status = "" if model_rmses[name] <= rmse_threshold else " [excluded]"
+                print(f"   {name}: {w:.3f} (RMSE={model_rmses[name]:.4f}){status}")
+
+            if ens_rmse > best_ind_rmse:
+                print(f"Meta-learner RMSE ({ens_rmse:.4f}) > best individual "
+                      f"({best_model}: {best_ind_rmse:.4f}). Using performance-"
+                      f"based weighted average instead.")
+                self.meta_model = None
             else:
-                self.meta_model = Ridge(alpha=1.0)
+                # Ensemble beats best individual — train final on ALL val predictions
+                if _LGB_AVAILABLE:
+                    self.meta_model = lgb.LGBMRegressor(
+                        n_estimators=100, max_depth=3, num_leaves=8,
+                        reg_alpha=1.0, reg_lambda=1.0,
+                        learning_rate=0.05, verbose=-1, random_state=42,
+                    )
+                else:
+                    self.meta_model = Ridge(alpha=1.0)
+                self.meta_model.fit(val_stacked, y_meta)
 
-            self.meta_model.fit(stacked_features, y_meta)
+                improvement = (best_ind_rmse - ens_rmse) / best_ind_rmse * 100
+                print(f"CV-stacked ensemble: RMSE={ens_rmse:.4f}, "
+                      f"best individual ({best_model})={best_ind_rmse:.4f}, "
+                      f"improvement={improvement:.1f}%")
 
-            # --- Fallback check: does ensemble beat best individual? ---
-            if X_val is not None and y_val is not None:
-                val_preds = self._get_base_predictions(X_val, for_training=False)
-                if len(val_preds) >= 2:
-                    val_min_len = min(len(v) for v in val_preds.values())
-                    val_trimmed = {k: v[:val_min_len] for k, v in val_preds.items()}
-                    val_stacked = np.column_stack(list(val_trimmed.values()))
-                    y_val_trimmed = y_val[-val_min_len:] if len(y_val) > val_min_len else y_val
-
-                    ens_pred = self.meta_model.predict(val_stacked)
-                    ens_rmse = np.sqrt(mean_squared_error(y_val_trimmed, ens_pred))
-
-                    best_ind_rmse = float('inf')
-                    best_model = None
-                    for name, pred in val_trimmed.items():
-                        rmse = np.sqrt(mean_squared_error(y_val_trimmed, pred))
-                        if rmse < best_ind_rmse:
-                            best_ind_rmse = rmse
-                            best_model = name
-
-                    if ens_rmse > best_ind_rmse:
-                        print(f"WARNING: Ensemble RMSE ({ens_rmse:.4f}) > best individual "
-                              f"({best_model}: {best_ind_rmse:.4f}). Falling back to "
-                              f"weighted average.")
-                        self.meta_model = None
-                    else:
-                        improvement = (best_ind_rmse - ens_rmse) / best_ind_rmse * 100
-                        print(f"CV-stacked ensemble: RMSE={ens_rmse:.4f}, "
-                              f"best individual ({best_model})={best_ind_rmse:.4f}, "
-                              f"improvement={improvement:.1f}%")
-
-            print("Meta-learner trained successfully (CV-stacked)")
+            print("Meta-learner training complete")
 
         except Exception as e:
             print(f"Meta-learner training failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.meta_model = None
 
     def _get_base_predictions(
@@ -682,7 +699,16 @@ class AdvancedEnsemble:
         return np.array(features).reshape(1, -1)
 
     def _initialize_regime_weights(self, price_history: np.ndarray) -> None:
-        """Initialize weights based on current market regime"""
+        """Initialize weights based on current market regime.
+
+        Skipped if validation-based performance weights were already set
+        by _train_meta_learner (those are more informative than static
+        regime priors).
+        """
+        if self._weights_from_validation:
+            print("Skipping regime weights — using validation performance weights")
+            return
+
         regime_info = self.regime_detector.detect_regime(price_history)
         regime = regime_info['regime']
 
@@ -729,8 +755,20 @@ class AdvancedEnsemble:
 
         # Combine predictions
         if self.meta_model is not None:
-            # Use meta-learner
-            stacked_features = np.column_stack(list(base_predictions.values()))
+            # Use meta-learner — stack columns in same order as training
+            if hasattr(self, 'meta_model_names') and self.meta_model_names:
+                ordered = [base_predictions[n] for n in self.meta_model_names
+                           if n in base_predictions]
+                if len(ordered) != len(self.meta_model_names):
+                    # Missing models — fall back to weighted average
+                    ensemble_pred = self._weighted_average(base_predictions)
+                    if return_individual:
+                        base_predictions['ensemble'] = ensemble_pred
+                        return base_predictions
+                    return ensemble_pred
+                stacked_features = np.column_stack(ordered)
+            else:
+                stacked_features = np.column_stack(list(base_predictions.values()))
 
             # Add regime features
             if price_history is not None:
@@ -756,7 +794,14 @@ class AdvancedEnsemble:
         return ensemble_pred
 
     def _update_regime_weights(self, price_history: np.ndarray) -> None:
-        """Update model weights based on current market regime"""
+        """Update model weights based on current market regime.
+
+        Skipped when validation-based performance weights are active —
+        those are data-driven and more reliable than static regime priors.
+        """
+        if self._weights_from_validation:
+            return
+
         regime_info = self.regime_detector.detect_regime(price_history)
         regime = regime_info['regime']
         confidence = regime_info['confidence']
@@ -1078,6 +1123,7 @@ class AdvancedEnsemble:
             'timestamp': timestamp,
             'config': self.config,
             'model_weights': self.model_weights,
+            'meta_model_names': self.meta_model_names,
             'saved_models': saved_models,
             'performance_history': {
                 k: list(v) for k, v in self.performance_history.items()
@@ -1111,6 +1157,7 @@ class AdvancedEnsemble:
                 data = json.load(f)
                 self.config = data.get('config', self.config)
                 self.model_weights = data.get('model_weights', self.model_weights)
+                self.meta_model_names = data.get('meta_model_names', [])
                 performance_hist = data.get('performance_history', {})
                 self.performance_history = defaultdict(list, {
                     k: v for k, v in performance_hist.items()

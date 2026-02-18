@@ -1,6 +1,6 @@
 # Crypto Prediction & Real-Time Dashboard
 
-Production-grade cryptocurrency price prediction system combining deep learning, gradient boosting, and ensemble methods with a real-time trading dashboard. Trained on 104 cryptocurrencies with 150+ engineered features.
+Production-grade cryptocurrency price prediction system combining deep learning, gradient boosting, and ensemble methods with a real-time trading dashboard. Five model architectures trained on 5 cryptocurrencies (BTC, ETH, LTC, XRP, DOGE) with 150+ engineered features across 104 coins.
 
 ## Overview
 
@@ -31,8 +31,8 @@ docker-compose up -d
 ### Train Models (GPU recommended: Colab T4/A100 or Apple Silicon with Metal)
 
 ```bash
-# Full production training for BTC and ETH (5 models + ensemble)
-python3 models/src/train_production.py --crypto BTC,ETH
+# Full production training for all 5 trained coins
+python3 models/src/train_production.py --crypto BTC,ETH,LTC,XRP,DOGE
 
 # Quick validation run
 python3 models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
@@ -41,8 +41,8 @@ python3 models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
 python3 models/src/train_production.py --crypto BTC --tune --tune-trials 20 \
     --tune-models dlinear,tcn,lstm,transformer,lightgbm
 
-# Full professional pipeline (tuning + walk-forward + both coins)
-python3 models/src/train_production.py --crypto BTC,ETH --tune --tune-trials 20 \
+# Full professional pipeline (tuning + walk-forward + all coins)
+python3 models/src/train_production.py --crypto BTC,ETH,LTC,XRP,DOGE --tune --tune-trials 20 \
     --tune-models dlinear,tcn,lstm,transformer,lightgbm --walk-forward --epochs 150
 ```
 
@@ -69,7 +69,9 @@ crypto-prediction/
 │
 ├── models/                           # ML models, training, and deployment
 │   ├── MODEL_ARCHITECTURE_AND_TRAINING.md  # Detailed model documentation
-│   ├── artifacts/                    # Saved model weights and metadata
+│   ├── artifacts/                    # Saved model weights and metadata (5 coins)
+│   │   ├── dlinear/
+│   │   ├── tcn/
 │   │   ├── enhanced_lstm/
 │   │   ├── transformer/
 │   │   ├── lightgbm/
@@ -320,18 +322,31 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Phase 2: ML Models** — DLinear, TCN, LSTM, Transformer, LightGBM, and CV-stacked Ensemble (5 models) with multi-step forecasting, log-return targets, data augmentation, cross-asset features, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
-- **BTC & ETH Production Training** — 5 model architectures (DLinear, TCN, LSTM, Transformer, LightGBM), Optuna tuning, CV-stacked ensemble, MC dropout uncertainty, cross-asset features, 10 diagnostic visualizations per run
-- **BTC Overfitting Fixes** — Log-return targets, mutual information feature selection (train-only), reduced model capacity, L2 regularization, data augmentation, summary statistics for LightGBM, CV-stacked ensemble meta-learner
+- **Multi-Coin Production Training** — BTC, ETH, LTC, XRP, and DOGE fully trained with Optuna tuning, walk-forward validation, MC dropout uncertainty, 10 diagnostic visualizations per coin, subprocess isolation for memory management
+- **Overfitting Fixes** — Log-return targets, mutual info feature selection (train-only), reduced model capacity, L2 regularization, data augmentation, summary stats for LightGBM — all models now show < 2x train/val gap
+
+### Training Results Summary (Feb 2026)
+
+| Coin | Best Model | Test RMSE | Val RMSE (1d) | Directional Accuracy (1d) |
+|------|-----------|-----------|---------------|---------------------------|
+| BTC | LightGBM | 0.716 | 0.91 | 52.7% (DLinear) |
+| ETH | LSTM | 0.947 | 0.83 | 55.4% (DLinear) |
+| LTC | TCN | 0.819 | 0.83 | 53.1% (DLinear) |
+| XRP | Transformer | 0.900 | 1.01 | 53.5% (LSTM) |
+| DOGE | Transformer | 1.083 | 1.28 | 51.3% (TCN) |
+
+See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) for detailed results, hyperparameters, and analysis.
 
 ### In Progress
 
-- Expanding training to top-20 coins by data availability (LTC, XRP, DOGE, BNB, SOL, ADA, LINK, DOT)
+- Ensemble weight optimization (currently static weights, -0.4% to -4.4% vs best individual model)
 - WebSocket streaming integration in frontend
 - Advanced analytics dashboard with live predictions
 
 ### Planned
 
 - Real-time model serving with FastAPI inference endpoint
+- Expand to more coins (BNB, SOL, ADA, LINK, DOT)
 - Portfolio optimization with trained models
 - Automated retraining pipeline with drift detection
 - Mobile-responsive PWA

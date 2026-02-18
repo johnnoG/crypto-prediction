@@ -30,6 +30,10 @@ import argparse
 import gc
 import logging
 import json
+import pickle
+import resource
+import subprocess as sp
+import tempfile
 import time
 import warnings
 from pathlib import Path
@@ -69,6 +73,71 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _log_memory(label: str = ""):
+    """Log current process RSS memory usage."""
+    # macOS ru_maxrss is in bytes
+    rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    rss_mb = rss_bytes / (1024 * 1024)
+    msg = f"  Memory (RSS): {rss_mb:.0f} MB"
+    if label:
+        msg = f"  [{label}] {msg}"
+    logger.info(msg)
+
+
+# ---------------------------------------------------------------------------
+# Subprocess tuning script template (%-formatted, no {} conflicts)
+# ---------------------------------------------------------------------------
+_TUNE_SUBPROCESS_SCRIPT = """\
+import sys, os, pickle, json, warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+sys.path.insert(0, %(src_dir)r)
+
+with open(%(data_path)r, 'rb') as f:
+    data = pickle.load(f)
+
+from training.hyperopt_pipeline import HyperparameterOptimizer
+optimizer = HyperparameterOptimizer(study_name="tune_%(crypto)s")
+
+try:
+    result = optimizer.optimize_model(
+        model_type=%(model_type)r,
+        X_train=data['X_train'],
+        y_train=data['y_train'],
+        X_val=data['X_val'],
+        y_val=data['y_val'],
+        n_trials=%(n_trials)d,
+        timeout=%(timeout)d,
+        feature_names=data['feature_names'],
+        optimization_metric="rmse",
+        cv_folds=3,
+    )
+    if result and 'best_params' in result:
+        # Convert numpy types to Python types for JSON serialization
+        bp = {}
+        for k, v in result['best_params'].items():
+            if hasattr(v, 'item'):
+                bp[k] = v.item()
+            elif isinstance(v, (list, tuple)):
+                bp[k] = [x.item() if hasattr(x, 'item') else x for x in v]
+            else:
+                bp[k] = v
+        output = {
+            'best_params': bp,
+            'best_value': float(result.get('best_value', float('inf'))),
+            'n_trials': int(result.get('n_trials', 0)),
+        }
+        with open(%(result_path)r, 'w') as f:
+            json.dump(output, f)
+        print("Best score:", output['best_value'])
+except Exception as e:
+    print(f"Tuning subprocess failed: {e}")
+    import traceback
+    traceback.print_exc()
+"""
+
 
 # Import models
 from models.enhanced_lstm import EnhancedLSTMForecaster
@@ -395,7 +464,7 @@ class ProductionTrainer:
             pass
         gc.collect()
         if label:
-            logger.info(f"  Memory cleanup after {label}")
+            _log_memory(f"after {label}")
 
     def train_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Train DLinear, TCN, LSTM, Transformer, LightGBM, and optionally Ensemble."""
@@ -872,7 +941,12 @@ def run_hyperparameter_tuning(
     config: TrainingConfig,
     data: Dict[str, Any],
 ) -> Dict[str, Dict[str, Any]]:
-    """Run Optuna hyperparameter optimization for selected models.
+    """Run Optuna hyperparameter optimization in isolated subprocesses.
+
+    Each model type's tuning runs in a separate subprocess so that ALL
+    TensorFlow/Metal memory is freed by the OS when the process exits.
+    This prevents the cumulative memory leaks that cause OOM kills during
+    long tuning sessions (20 trials x 5 models = 100 model builds).
 
     Returns dict mapping model_type -> best_params.
     """
@@ -882,60 +956,101 @@ def run_hyperparameter_tuning(
         return {}
 
     logger.info("=" * 60)
-    logger.info("  HYPERPARAMETER OPTIMIZATION")
+    logger.info("  HYPERPARAMETER OPTIMIZATION (subprocess-isolated)")
     logger.info(f"  Trials per model: {config.tune_trials}")
     logger.info(f"  Timeout per model: {config.tune_timeout}s")
     logger.info("=" * 60)
+    _log_memory("before tuning")
 
-    optimizer = HyperparameterOptimizer(
-        study_name=f"tune_{config.crypto}",
-    )
-
-    # Build sequenced data for the optimizer (LSTM/Transformer need sequences)
-    # The optimizer's ObjectiveFunction handles this internally via model.prepare_sequences()
-    # But it expects flat X, y arrays — pass the combined train/val arrays
     models_to_tune = [m.strip().lower() for m in config.tune_models.split(',')]
     tuned_configs = {}
-    tuning_results = {}
 
-    for model_type in models_to_tune:
-        logger.info(f"\n  Tuning {model_type} ({config.tune_trials} trials)...")
-        try:
-            result = optimizer.optimize_model(
-                model_type=model_type,
-                X_train=data['X_train'],
-                y_train=data['y_train'],
-                X_val=data['X_val'],
-                y_val=data['y_val'],
-                n_trials=config.tune_trials,
-                timeout=config.tune_timeout,
-                feature_names=data['feature_names'],
-                optimization_metric="rmse",
-                cv_folds=3,
+    # Save tuning data ONCE — shared across all model subprocesses
+    data_path = os.path.join(
+        tempfile.gettempdir(),
+        f'tune_data_{config.crypto}_{os.getpid()}.pkl',
+    )
+    tune_data = {
+        'X_train': data['X_train'],
+        'y_train': data['y_train'],
+        'X_val': data['X_val'],
+        'y_val': data['y_val'],
+        'feature_names': data['feature_names'],
+    }
+    with open(data_path, 'wb') as f:
+        pickle.dump(tune_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+    data_size_mb = os.path.getsize(data_path) / 1e6
+    logger.info(f"  Saved tuning data ({data_size_mb:.1f} MB)")
+
+    src_dir = str(Path(__file__).parent)
+
+    try:
+        for model_type in models_to_tune:
+            logger.info(f"\n  Tuning {model_type} in subprocess ({config.tune_trials} trials)...")
+            result_path = os.path.join(
+                tempfile.gettempdir(),
+                f'tune_result_{config.crypto}_{model_type}_{os.getpid()}.json',
             )
-            if result and 'best_params' in result:
-                tuned_configs[model_type] = result['best_params']
-                tuning_results[model_type] = {
-                    'best_value': result.get('best_value'),
-                    'best_trial': result.get('best_trial'),
-                    'n_trials': result.get('n_trials'),
-                }
-                logger.info(f"  Best {model_type} RMSE: {result.get('best_value', 'N/A'):.4f}")
-                logger.info(f"  Best params: {result['best_params']}")
-        except Exception as e:
-            logger.warning(f"  Tuning failed for {model_type}: {e}")
+
+            # Generate tuning script from template
+            script_content = _TUNE_SUBPROCESS_SCRIPT % {
+                'src_dir': src_dir,
+                'data_path': data_path,
+                'crypto': config.crypto,
+                'model_type': model_type,
+                'n_trials': config.tune_trials,
+                'timeout': config.tune_timeout,
+                'result_path': result_path,
+            }
+
+            script_path = os.path.join(
+                tempfile.gettempdir(),
+                f'tune_{config.crypto}_{model_type}_{os.getpid()}.py',
+            )
+            with open(script_path, 'w') as f:
+                f.write(script_content)
+
+            try:
+                proc = sp.run(
+                    [sys.executable, script_path],
+                    timeout=config.tune_timeout + 120,
+                )
+
+                if os.path.exists(result_path) and os.path.getsize(result_path) > 0:
+                    with open(result_path) as f:
+                        output = json.load(f)
+                    tuned_configs[model_type] = output['best_params']
+                    best_val = output.get('best_value', 'N/A')
+                    if isinstance(best_val, float):
+                        logger.info(f"  Best {model_type} RMSE: {best_val:.4f}")
+                    logger.info(f"  Best params: {output['best_params']}")
+                elif proc.returncode != 0:
+                    logger.warning(
+                        f"  Tuning subprocess for {model_type} exited "
+                        f"with code {proc.returncode}"
+                    )
+                else:
+                    logger.warning(f"  No results from {model_type} tuning")
+
+            except sp.TimeoutExpired:
+                logger.warning(f"  Tuning subprocess for {model_type} timed out")
+            finally:
+                for path in (script_path, result_path):
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+
+            _log_memory(f"after {model_type} tuning")
+
+    finally:
+        try:
+            os.unlink(data_path)
+        except OSError:
+            pass
 
     logger.info(f"\n  Tuning complete. Tuned models: {list(tuned_configs.keys())}")
-
-    # Free tuning memory before production training
-    del optimizer
-    try:
-        from tensorflow import keras
-        keras.backend.clear_session()
-    except Exception:
-        pass
-    gc.collect()
-
+    _log_memory("after all tuning")
     return tuned_configs
 
 
@@ -1132,16 +1247,23 @@ class TrainingVisualizer:
         """Generate all visualizations."""
         logger.info(f"Generating visualizations in {self.output_dir}")
 
-        self._plot_loss_curves(results)
-        self._plot_metrics_progression(results)
-        self._plot_learning_rates(results)
-        self._plot_attention_heatmap(results, data)
-        self._plot_feature_importance(results)
-        self._plot_model_comparison(results)
-        self._plot_predictions_vs_actual(results)
-        self._plot_residual_analysis(results)
-        self._plot_ensemble_weights(results)
-        self._plot_training_summary(results)
+        plots = [
+            ('loss_curves', lambda: self._plot_loss_curves(results)),
+            ('metrics_progression', lambda: self._plot_metrics_progression(results)),
+            ('learning_rates', lambda: self._plot_learning_rates(results)),
+            ('attention_heatmap', lambda: self._plot_attention_heatmap(results, data)),
+            ('feature_importance', lambda: self._plot_feature_importance(results)),
+            ('model_comparison', lambda: self._plot_model_comparison(results)),
+            ('predictions_vs_actual', lambda: self._plot_predictions_vs_actual(results)),
+            ('residual_analysis', lambda: self._plot_residual_analysis(results)),
+            ('ensemble_weights', lambda: self._plot_ensemble_weights(results)),
+            ('training_summary', lambda: self._plot_training_summary(results)),
+        ]
+        for name, fn in plots:
+            try:
+                fn()
+            except Exception as e:
+                logger.warning(f"  Skipped {name}: {e}")
 
         logger.info(f"Generated {len(self.generated_files)} visualizations")
         return self.generated_files
@@ -1769,9 +1891,10 @@ def generate_report(
                 y_true, y_pred = _extract_horizon_standalone(y_test, test_preds, horizon, idx)
                 if y_true is not None and y_pred is not None and len(y_true) > 1:
                     n = min(len(y_true), len(y_pred))
-                    actual_dir = np.sign(np.diff(y_true[:n]))
-                    pred_dir = np.sign(np.diff(y_pred[:n]))
-                    mask = actual_dir != 0  # exclude flat days
+                    # For log-return targets: positive = price up, negative = price down
+                    actual_dir = np.sign(y_true[:n])
+                    pred_dir = np.sign(y_pred[:n])
+                    mask = actual_dir != 0  # exclude zero-return days
                     if mask.sum() > 0:
                         dir_acc[horizon] = float(np.mean(actual_dir[mask] == pred_dir[mask]))
             if dir_acc:
@@ -1987,18 +2110,20 @@ def train_single_crypto(config: TrainingConfig):
     # 1. Load data
     loader = ProductionDataLoader(config)
     data = loader.load_and_prepare()
+    _log_memory("after data load")
 
-    # 2. Hyperparameter tuning (optional)
+    # 2. Hyperparameter tuning (optional — each model in its own subprocess)
     tuned_configs = {}
     tuning_results = None
     if config.tune:
         tuned_configs = run_hyperparameter_tuning(config, data)
-        # Store tuning metadata for report
         tuning_results = tuned_configs
+        _log_memory("after tuning")
 
     # 3. Train models (with optional tuned configs)
     trainer = ProductionTrainer(config, tuned_configs=tuned_configs)
     results = trainer.train_all(data)
+    _log_memory("after training")
 
     # 4. Walk-forward validation (optional)
     wf_results = None
@@ -2017,34 +2142,6 @@ def train_single_crypto(config: TrainingConfig):
 
     # 7. Save models FIRST (never lose trained weights to a viz crash)
     save_models(results, config)
-
-    # 7b. Free Keras model graphs and large arrays — weights are saved,
-    #     only need history/metrics/config/test_preds for viz and reporting.
-    #     Attention heatmap (needs live model) will be skipped gracefully.
-    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
-        if model_name in results and 'model' in results[model_name]:
-            keras_model = getattr(results[model_name]['model'], 'model', None)
-            if keras_model is not None:
-                del keras_model
-                results[model_name]['model'].model = None
-        # Free X_test (only needed by UQ which already ran)
-        if model_name in results:
-            results[model_name].pop('X_test', None)
-    if 'lightgbm' in results:
-        results['lightgbm'].pop('X_test', None)
-    # Also free ensemble's references to sub-models
-    if 'ensemble' in results and 'model' in results['ensemble']:
-        ens = results['ensemble']['model']
-        for attr in ('dlinear', 'tcn', 'transformer', 'enhanced_lstm', 'lightgbm'):
-            if hasattr(ens, attr):
-                setattr(ens, attr, None)
-    try:
-        from tensorflow import keras
-        keras.backend.clear_session()
-    except Exception:
-        pass
-    gc.collect()
-    logger.info("Freed Keras model memory after save (weights persisted)")
 
     # 8. Generate visualizations (non-fatal — wrapped in try/except)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -2085,6 +2182,31 @@ def train_single_crypto(config: TrainingConfig):
         )
     except Exception as e:
         logger.warning(f"MLflow logging failed (models already saved): {e}")
+
+    # 11. Free Keras memory AFTER all post-training steps are done.
+    #     Each crypto runs in its own subprocess so process exit will reclaim
+    #     everything, but explicit cleanup helps if caller continues.
+    for model_name in ('dlinear', 'tcn', 'lstm', 'transformer'):
+        if model_name in results and 'model' in results[model_name]:
+            keras_model = getattr(results[model_name]['model'], 'model', None)
+            if keras_model is not None:
+                del keras_model
+                results[model_name]['model'].model = None
+        if model_name in results:
+            results[model_name].pop('X_test', None)
+    if 'lightgbm' in results:
+        results['lightgbm'].pop('X_test', None)
+    if 'ensemble' in results and 'model' in results['ensemble']:
+        ens = results['ensemble']['model']
+        for attr in ('dlinear', 'tcn', 'transformer', 'enhanced_lstm', 'lightgbm'):
+            if hasattr(ens, attr):
+                setattr(ens, attr, None)
+    try:
+        from tensorflow import keras
+        keras.backend.clear_session()
+    except Exception:
+        pass
+    gc.collect()
 
     logger.info(f"Training complete for {config.crypto}")
     logger.info(f"Visualizations: {viz_dir}")
@@ -2143,53 +2265,81 @@ def main():
 
     cryptos = [c.strip().upper() for c in args.crypto.split(',')]
 
-    for crypto in cryptos:
-        config = TrainingConfig(
-            crypto=crypto,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            sequence_length=args.seq_length,
-            max_features=args.max_features,
-            train_dlinear=not args.no_dlinear,
-            train_tcn=not args.no_tcn,
-            train_ensemble=not args.no_ensemble,
-            output_dir=args.output_dir,
-            tune=args.tune,
-            tune_trials=args.tune_trials,
-            tune_timeout=args.tune_timeout,
-            tune_models=args.tune_models,
-            walk_forward=args.walk_forward,
-            wf_n_splits=args.wf_splits,
-            wf_min_train_size=args.wf_min_train,
-            wf_expanding=not args.wf_rolling,
-            uncertainty=not args.no_uncertainty,
-            mc_samples=args.mc_samples,
-            advanced_mlflow=not args.no_advanced_mlflow,
-        )
+    # --- Multi-crypto: run each in a subprocess for full memory isolation ---
+    if len(cryptos) > 1:
+        script = str(Path(__file__).resolve())
 
-        try:
-            results, viz_dir = train_single_crypto(config)
-            print(f"\n{'='*60}")
-            print(f"  {crypto} TRAINING COMPLETE")
-            print(f"  Plots saved to: {viz_dir}")
-            print(f"{'='*60}\n")
-        except Exception as e:
-            logger.error(f"Training failed for {crypto}: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            # Free all model memory before next crypto
-            try:
-                del results
-            except NameError:
-                pass
-            try:
-                from tensorflow import keras
-                keras.backend.clear_session()
-            except Exception:
-                pass
-            gc.collect()
-            logger.info(f"Memory cleanup after {crypto} complete")
+        # Build args list without --crypto (we'll inject single crypto)
+        other_args = []
+        skip_next = False
+        for arg in sys.argv[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if arg.startswith('--crypto='):
+                continue
+            if arg == '--crypto':
+                skip_next = True
+                continue
+            other_args.append(arg)
+
+        all_ok = True
+        for crypto in cryptos:
+            cmd = [sys.executable, script, '--crypto', crypto] + other_args
+            logger.info(f"\n{'='*60}")
+            logger.info(f"  Launching subprocess for {crypto}")
+            logger.info(f"  Command: {' '.join(cmd)}")
+            logger.info(f"{'='*60}")
+
+            proc = sp.run(cmd)
+            if proc.returncode != 0:
+                logger.error(f"Training failed for {crypto} (exit {proc.returncode})")
+                all_ok = False
+            else:
+                print(f"\n{'='*60}")
+                print(f"  {crypto} TRAINING COMPLETE (subprocess)")
+                print(f"{'='*60}\n")
+
+        sys.exit(0 if all_ok else 1)
+
+    # --- Single crypto: direct execution ---
+    crypto = cryptos[0]
+    config = TrainingConfig(
+        crypto=crypto,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        sequence_length=args.seq_length,
+        max_features=args.max_features,
+        train_dlinear=not args.no_dlinear,
+        train_tcn=not args.no_tcn,
+        train_ensemble=not args.no_ensemble,
+        output_dir=args.output_dir,
+        tune=args.tune,
+        tune_trials=args.tune_trials,
+        tune_timeout=args.tune_timeout,
+        tune_models=args.tune_models,
+        walk_forward=args.walk_forward,
+        wf_n_splits=args.wf_splits,
+        wf_min_train_size=args.wf_min_train,
+        wf_expanding=not args.wf_rolling,
+        uncertainty=not args.no_uncertainty,
+        mc_samples=args.mc_samples,
+        advanced_mlflow=not args.no_advanced_mlflow,
+    )
+
+    _log_memory("startup")
+
+    try:
+        results, viz_dir = train_single_crypto(config)
+        print(f"\n{'='*60}")
+        print(f"  {crypto} TRAINING COMPLETE")
+        print(f"  Plots saved to: {viz_dir}")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"Training failed for {crypto}: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

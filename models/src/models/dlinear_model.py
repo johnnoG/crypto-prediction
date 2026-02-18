@@ -102,7 +102,7 @@ class DLinearForecaster:
         )
 
         losses = {f'output_{h}d': 'huber' for h in self.config['multi_step']}
-        loss_weights = {f'output_{h}d': 1.0 / np.sqrt(h) for h in self.config['multi_step']}
+        loss_weights = {f'output_{h}d': float(1.0 / np.sqrt(h)) for h in self.config['multi_step']}
 
         model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights)
         return model

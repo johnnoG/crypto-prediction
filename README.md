@@ -322,30 +322,34 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Phase 2: ML Models** — DLinear, TCN, LSTM, Transformer, LightGBM, and CV-stacked Ensemble (5 models) with multi-step forecasting, log-return targets, data augmentation, cross-asset features, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
-- **Multi-Coin Production Training** — BTC, ETH, LTC, XRP, and DOGE fully trained with Optuna tuning, walk-forward validation, MC dropout uncertainty, 10 diagnostic visualizations per coin, subprocess isolation for memory management
+- **Multi-Coin Production Training** — BTC, ETH, LTC, XRP, and DOGE fully trained with Optuna tuning (20 trials x 5 models), walk-forward validation, MC dropout uncertainty, 10 diagnostic visualizations per coin, subprocess isolation for memory management
 - **Overfitting Fixes** — Log-return targets, mutual info feature selection (train-only), reduced model capacity, L2 regularization, data augmentation, summary stats for LightGBM — all models now show < 2x train/val gap
+- **Ensemble & Metric Fixes** — Performance-based inverse-sq-RMSE ensemble weighting (replaces static regime weights), fixed directional accuracy for log-return targets, MCDropout class for Transformer uncertainty
 
-### Training Results Summary (Feb 2026)
+### Training Results Summary (Feb 2026 — Run 2, post-fixes)
 
-| Coin | Best Model | Test RMSE | Val RMSE (1d) | Directional Accuracy (1d) |
-|------|-----------|-----------|---------------|---------------------------|
-| BTC | LightGBM | 0.716 | 0.91 | 52.7% (DLinear) |
-| ETH | LSTM | 0.947 | 0.83 | 55.4% (DLinear) |
-| LTC | TCN | 0.819 | 0.83 | 53.1% (DLinear) |
-| XRP | Transformer | 0.900 | 1.01 | 53.5% (LSTM) |
-| DOGE | Transformer | 1.083 | 1.28 | 51.3% (TCN) |
+| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d) |
+|------|-----------|-----------|---------------|------------------|--------------|
+| BTC | LightGBM | 0.716 | 0.739 | -3.3% | 53.3% (LightGBM) |
+| ETH | LSTM | 0.948 | 0.958 | -1.1% | 51.5% (DLinear) |
+| LTC | TCN | 0.818 | 0.821 | -0.3% | 54.0% (DLinear) |
+| XRP | LSTM | 0.900 | 0.933 | -3.6% | 51.8% (Transformer) |
+| DOGE | LSTM | 1.085 | 1.097 | -1.1% | 57.0% (Transformer) |
+
+Key improvements from Run 1: fixed directional accuracy calculation (LightGBM was showing 5-16%, now correct ~50%), ensemble uses performance-based inverse-sq-RMSE weights (was static regime weights causing -158% regression), all train/val gaps < 2x.
 
 See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) for detailed results, hyperparameters, and analysis.
 
 ### In Progress
 
-- Ensemble weight optimization (currently static weights, -0.4% to -4.4% vs best individual model)
+- Transformer MC dropout uncertainty (MCDropout class added but output-head-only dropout produces near-zero CI for most coins)
 - WebSocket streaming integration in frontend
 - Advanced analytics dashboard with live predictions
 
 ### Planned
 
 - Real-time model serving with FastAPI inference endpoint
+- Ensemble improvements (meta-learner still falls back to weighted average on all coins)
 - Expand to more coins (BNB, SOL, ADA, LINK, DOT)
 - Portfolio optimization with trained models
 - Automated retraining pipeline with drift detection

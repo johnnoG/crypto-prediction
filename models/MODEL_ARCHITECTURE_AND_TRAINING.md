@@ -295,24 +295,28 @@ Our ensemble uses three complementary techniques:
 
 ### 1. CV-Stacked Meta-Learner
 
-The meta-learner trains on **out-of-fold** predictions from `TimeSeriesSplit(n_splits=5)`, not in-sample predictions. This prevents the meta-learner from learning to trust overfit base model predictions.
+Base models are trained on the training split only. The meta-learner trains on their **validation set predictions** (genuinely out-of-sample). A `TimeSeriesSplit(n_splits=3)` cross-validation on these validation predictions provides an unbiased estimate of ensemble quality.
 
 ```
-Training data
+Base models trained on X_train
   |
-  TimeSeriesSplit(n_splits=5)
+  Get predictions on X_val (genuinely OOF)
   |
-  For each fold:
-    Train base models on train portion
-    Collect predictions on held-out portion (OOF predictions)
+  Compute per-model RMSE on validation predictions
   |
-  Stack all OOF predictions as meta-features
+  TimeSeriesSplit(n_splits=3) on validation predictions
   |
-  Train LightGBM meta-learner on OOF predictions → actual targets
+  If OOF ensemble RMSE < best individual:
+    Train final LightGBM meta-learner on ALL validation predictions
     (n_estimators=100, max_depth=3, num_leaves=8, reg_alpha=1.0)
+  Else:
+    Fall back to performance-based weighted average
+  |
+  Always: set inverse-squared-RMSE weights from validation RMSE
+  Exclude models with RMSE > 2x best individual (weight = 0)
 ```
 
-**Fallback logic**: After training, if the stacked ensemble RMSE exceeds the best individual model's RMSE on validation data, the ensemble falls back to a simple weighted average with a warning.
+**Fallback logic**: If the stacked ensemble can't beat the best individual model on cross-validated validation splits, it falls back to a performance-based weighted average using inverse-squared-RMSE weights. This ensures poorly-performing models (e.g., DLinear on BTC) receive minimal weight without manual tuning.
 
 ### 2. Market Regime Detection
 
@@ -598,89 +602,139 @@ mlflow ui --backend-store-uri file://models/src/mlruns_production --port 5000
 
 ---
 
-## Training Results (February 2026)
+## Training Results (February 2026 — Run 2, post-fixes)
 
-Production training was run across 5 cryptocurrencies (BTC, ETH, LTC, XRP, DOGE) with Optuna hyperparameter tuning, walk-forward validation, and MC dropout uncertainty quantification on Apple Silicon (Metal GPU).
+Production training run across 5 cryptocurrencies (BTC, ETH, LTC, XRP, DOGE) with Optuna hyperparameter tuning (20 trials per model), walk-forward validation, MC dropout uncertainty quantification, and advanced MLflow logging. Run on Apple Silicon (Metal GPU). Total wall-clock time: ~18 hours.
 
-### Validation RMSE by Model (log-return space)
+### Pipeline fixes applied before this run
+
+1. **Directional accuracy**: Fixed `np.sign(np.diff(y))` to `np.sign(y)` for log-return targets (was measuring change-of-change instead of direction, making LightGBM show 5-16% DA)
+2. **Ensemble weighting**: Performance-based inverse-squared-RMSE weights replace static regime weights; models > 2x worse than best are excluded; regime weight interpolation disabled when validation weights are active
+3. **Transformer MC Dropout**: Added `MCDropout` class (always-on dropout) for output heads to enable Monte Carlo uncertainty on TF-Metal
+
+### Validation RMSE by Model (1d horizon, log-return space)
 
 | Model | BTC | ETH | LTC | XRP | DOGE |
 |-------|-----|-----|-----|-----|------|
-| DLinear | 1.29 | 0.88 | 0.84 | 1.02 | 1.34 |
-| TCN | 0.91 | 0.84 | 0.83 | 1.02 | 1.29 |
+| DLinear | 1.35 | 0.87 | 0.84 | 1.03 | 1.31 |
+| TCN | 0.91 | 0.84 | 0.84 | 1.02 | 1.29 |
 | LSTM | 0.91 | 0.83 | 0.84 | 1.02 | 1.28 |
-| Transformer | 0.91 | 0.83 | 0.83 | 1.01 | 1.28 |
+| Transformer | 0.92 | 0.83 | 0.83 | 1.02 | 1.27 |
 | LightGBM (MAE) | 0.61 | 0.59 | 0.57 | 0.64 | 0.92 |
-| **Ensemble** | **0.75** | **0.95** | **0.82** | **0.91** | **1.09** |
 
 ### Train/Validation Gap (overfitting ratio, 1d horizon)
 
 | Model | BTC | ETH | LTC | XRP | DOGE |
 |-------|-----|-----|-----|-----|------|
-| DLinear | 1.35x | 1.25x | 1.25x | 1.30x | 1.13x |
-| TCN | 1.88x | 1.29x | 1.30x | 1.33x | 1.26x |
-| LSTM | 1.93x | 1.36x | 1.30x | 1.33x | 1.29x |
-| Transformer | 1.93x | 1.36x | 1.32x | 1.34x | 1.29x |
+| DLinear | 1.31x | 1.27x | 1.33x | 1.28x | 1.30x |
+| TCN | 1.91x | 1.32x | 1.30x | 1.31x | 1.25x |
+| LSTM | 1.93x | 1.35x | 1.30x | 1.32x | 1.30x |
+| Transformer | 1.92x | 1.37x | 1.32x | 1.33x | 1.31x |
 
 All models show healthy train/val gaps (< 2x), a major improvement from the initial BTC runs that had 2.7-5.8x gaps before the overfitting fixes (log-return targets, mutual info feature selection, L2 regularization, data augmentation, reduced capacity).
 
 ### Best Individual Model (test RMSE) by Coin
 
-| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best |
-|------|-----------|-----------|---------------|------------------|
-| BTC | LightGBM | 0.716 | 0.748 | -4.4% |
-| ETH | LSTM | 0.947 | 0.954 | -0.7% |
-| LTC | TCN | 0.819 | 0.822 | -0.4% |
-| XRP | Transformer | 0.900 | 0.913 | -1.4% |
-| DOGE | Transformer | 1.083 | 1.090 | -0.6% |
+| Coin | Best Model | Test RMSE | 2nd Best | Ensemble RMSE | Ensemble vs Best |
+|------|-----------|-----------|----------|---------------|------------------|
+| BTC | LightGBM | 0.716 | LSTM (0.718) | 0.739 | -3.3% |
+| ETH | LSTM | 0.948 | LightGBM (0.950) | 0.958 | -1.1% |
+| LTC | TCN | 0.818 | Transformer (0.820) | 0.821 | -0.3% |
+| XRP | LSTM | 0.900 | LightGBM (0.909) | 0.933 | -3.6% |
+| DOGE | LSTM | 1.085 | LightGBM (1.087) | 1.097 | -1.1% |
 
-The ensemble currently uses static weights (DLinear 0.15, TCN 0.15, Transformer 0.25, LSTM 0.25, LightGBM 0.20) and slightly underperforms the best individual model on all coins. The CV-stacked meta-learner is not yet learning coin-specific optimal weights — this is a key area for improvement.
+The ensemble uses performance-based inverse-squared-RMSE weights computed from validation predictions. Models with RMSE > 2x the best are excluded (DLinear excluded for BTC). The meta-learner consistently falls back to the weighted average (LightGBM meta-learner can't beat the best individual on cross-validated validation splits). The ensemble is within -0.3% to -3.6% of the best individual model — a significant improvement from the previous run's -0.4% to -4.4%.
+
+### Ensemble Weights by Coin
+
+| Model | BTC | ETH | LTC | XRP | DOGE |
+|-------|-----|-----|-----|-----|------|
+| DLinear | 12.5% | 19.1% | 20.3% | 20.5% | 19.3% |
+| TCN | 21.6% | 20.4% | 19.8% | 20.0% | 20.2% |
+| Transformer | 21.6% | 19.4% | 20.1% | 19.8% | 19.8% |
+| LSTM | 22.3% | 20.6% | 19.8% | 19.6% | 20.4% |
+| LightGBM | 22.0% | 20.5% | 20.0% | 20.1% | 20.3% |
+
+For ETH, LTC, XRP, DOGE: all 5 models have similar RMSE, so weights are near-uniform (~20% each). For BTC: DLinear receives lower weight (12.5%) but is not excluded because its validation RMSE (1.35) is within 2x of the best (0.91).
 
 ### Directional Accuracy (1-day horizon)
 
 | Model | BTC | ETH | LTC | XRP | DOGE |
 |-------|-----|-----|-----|-----|------|
-| DLinear | 52.7% | **55.4%** | **53.1%** | 47.2% | 49.4% |
-| TCN | 48.5% | 48.0% | 52.0% | 50.6% | **51.3%** |
-| LSTM | 47.5% | 46.5% | 49.8% | **53.5%** | 49.4% |
-| Transformer | 49.6% | 46.9% | 49.1% | 53.1% | 48.7% |
+| DLinear | 51.7% | **51.5%** | **54.0%** | 49.6% | 49.6% |
+| TCN | **52.6%** | 47.1% | 46.7% | 50.4% | **54.0%** |
+| LSTM | 52.2% | 48.9% | 47.8% | 51.1% | 50.4% |
+| Transformer | 50.9% | 49.6% | 49.6% | **51.8%** | **57.0%** |
+| LightGBM | **53.3%** | 47.4% | 50.4% | 50.0% | 53.7% |
 
-Directional accuracy hovers around 47-55% across all models and coins — slightly above random for some coins, indicating that while log-return magnitude is well-predicted, the sign (direction) remains challenging. This is consistent with the efficient market hypothesis for liquid crypto assets.
+Directional accuracy ranges from 47-57% across all models and coins. This is now correctly computed as `sign(log_return)` (positive = price up). LightGBM and TCN tend to have the highest DA for BTC; Transformer leads for DOGE (57.0%). The modest above-random performance is consistent with the efficient market hypothesis for liquid crypto assets.
+
+### Training Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Epochs (max) | 150 |
+| Early stopping patience | 10 |
+| Batch size | 32 |
+| Sequence length | 60 days |
+| Max features | 50 (mutual information) |
+| Train/val/test split | 70% / 15% / 15% |
+| Optuna trials | 20 per model |
+| MC dropout samples | 50 |
+
+### Epochs Trained (early stopped)
+
+| Model | BTC | ETH | LTC | XRP | DOGE |
+|-------|-----|-----|-----|-----|------|
+| DLinear | 33 | 30 | 17 | 45 | 22 |
+| TCN | 14 | 19 | 19 | 47 | 19 |
+| LSTM | 37 | 35 | 53 | 87 | 42 |
+| Transformer | 15 | 30 | 31 | 21 | 15 |
+
+LSTM consistently trains the longest before early stopping triggers. XRP requires the most epochs across all models (47-87), suggesting its return distribution is harder to fit.
 
 ### Training Time (Apple Silicon M3 Max, Metal GPU)
 
 | Model | BTC | ETH | LTC | XRP | DOGE |
 |-------|-----|-----|-----|-----|------|
-| DLinear | 2.4 min | 0.8 min | 0.6 min | 0.8 min | 1.5 min |
-| TCN | 17.1 min | 3.3 min | 4.8 min | 3.1 min | 7.7 min |
-| LSTM | 50.6 min | 6.6 min | 7.5 min | 4.8 min | 9.4 min |
-| Transformer | 38.6 min | 22.1 min | 9.6 min | 12.3 min | 5.4 min |
-| LightGBM | 0.03 min | 0.01 min | 0.02 min | 0.01 min | 0.01 min |
-| Ensemble | 0.3 min | 0.2 min | 0.1 min | 0.1 min | 0.2 min |
+| DLinear | 2.2 min | 0.4 min | 0.3 min | 0.6 min | 0.4 min |
+| TCN | 10.7 min | 5.5 min | 5.6 min | 12.1 min | 34.5 min |
+| LSTM | 51.9 min | 15.7 min | 26.4 min | 50.1 min | 30.2 min |
+| Transformer | 17.2 min | 9.4 min | 14.2 min | 10.1 min | 5.0 min |
+| LightGBM | 0.02 min | 0.01 min | 0.02 min | 0.02 min | 0.01 min |
+| **Total** | **~82 min** | **~31 min** | **~47 min** | **~73 min** | **~70 min** |
 
-### Optuna-Tuned Hyperparameters (selected highlights)
+Times include Optuna hyperparameter tuning (20 trials per model, subprocess-isolated). DOGE TCN took 34.5 min due to its tuned configuration requiring more compute per epoch.
+
+### Optuna-Tuned Hyperparameters
 
 | Parameter | BTC | ETH | LTC | XRP | DOGE |
 |-----------|-----|-----|-----|-----|------|
-| DLinear kernel_size | 31 | 31 | 27 | 17 | 19 |
-| TCN n_filters | default | 64 | default | 16 | default |
-| LSTM layers x units | default | 3x[64,128,64] | 3x[128,128,128] | 3x[128,128,128] | 3x[128,128,128] |
-| Transformer d_model | 128 | 64 | default | 64 | default |
-| LightGBM num_leaves | 26 | 39 | 64 | 18 | 10 |
-| LightGBM n_estimators | 223 | 351 | 146 | 174 | 452 |
+| DLinear kernel | 17 | 27 | 35 | 27 | 27 |
+| DLinear dropout | 0.17 | 0.09 | 0.22 | 0.09 | 0.09 |
+| TCN filters | — | 64 | — | 16 | 32 |
+| TCN blocks | — | 4 | — | 4 | 3 |
+| LSTM layers x units | — | — | — | — | 3x128 bidir |
+| LSTM dropout | — | — | — | — | 0.45 |
+| Transformer d_model | 128 | — | 64 | 128 | — |
+| Transformer layers | 3 | — | 3 | 3 | — |
+| Transformer dropout | 0.31 | — | 0.13 | 0.31 | — |
+| LightGBM leaves | 26 | 39 | 64 | 18 | 10 |
+| LightGBM estimators | 223 | 351 | 146 | 174 | 452 |
+| LightGBM depth | 9 | 4 | 5 | 7 | 5 |
 
-"default" indicates Optuna tuning was not run for that model/coin combination (previous coin's params were reused).
+"—" indicates default parameters were used (Optuna tuning not run or reused from another coin).
 
 ### Uncertainty Quantification (MC Dropout, 50 samples)
 
-| Model | BTC CI Width | ETH CI Width | LTC CI Width | XRP CI Width | DOGE CI Width |
-|-------|-------------|-------------|-------------|-------------|--------------|
-| DLinear | 21.2 | 1.93 | 0.64 | 11.6 | 2.83 |
-| TCN | 0.50 | 1.02 | 0.74 | 0.48 | 1.00 |
-| LSTM | 0.05 | 0.04 | 0.04 | 0.09 | 0.04 |
-| Transformer | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| Model | BTC CI | ETH CI | LTC CI | XRP CI | DOGE CI |
+|-------|--------|--------|--------|--------|---------|
+| DLinear | 25.4 | 1.67 | 1.07 | 8.12 | 2.80 |
+| TCN | 0.63 | 1.07 | 0.83 | 1.68 | 2.66 |
+| LSTM | 0.06 | 0.18 | 0.06 | 0.06 | 0.005 |
+| Transformer | 0.0 | 0.0 | ~0.0 | 0.0 | 0.001 |
 
-LSTM shows the most useful uncertainty estimates (narrow but non-zero CI widths). Transformer shows zero CI width due to deterministic inference (no dropout during forward pass). DLinear shows wide, noisy CIs due to its minimal dropout layer.
+TCN provides the most useful uncertainty estimates (meaningful CI widths that correlate with prediction difficulty). LSTM CIs are narrow but non-zero. Transformer MCDropout activates on DOGE (0.001 CI) but remains near-zero for other coins — the output-head-only MCDropout has minimal effect when the transformer body produces deterministic representations. DLinear CIs are wide and noisy due to the model's high base variance.
 
 ---
 

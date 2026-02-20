@@ -1,0 +1,83 @@
+{
+  "BTC": {
+    "timestamp": "20260218_173812",
+    "artifact_timestamps": {
+      "dlinear": "20260218_173811",
+      "tcn": "20260218_173811",
+      "enhanced_lstm": "20260218_173812",
+      "transformer": "20260218_173812"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "DOGE": {
+    "timestamp": "20260219_111514",
+    "artifact_timestamps": {
+      "dlinear": "20260219_111514",
+      "tcn": "20260219_111514",
+      "enhanced_lstm": "20260219_111514",
+      "transformer": "20260219_111514"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer",
+      "lightgbm"
+    ],
+    "n_features": 50
+  },
+  "ETH": {
+    "timestamp": "20260218_212927",
+    "artifact_timestamps": {
+      "dlinear": "20260218_212926",
+      "tcn": "20260218_212927",
+      "enhanced_lstm": "20260218_212927",
+      "transformer": "20260218_212927"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "LTC": {
+    "timestamp": "20260219_014224",
+    "artifact_timestamps": {
+      "dlinear": "20260219_014223",
+      "tcn": "20260219_014223",
+      "enhanced_lstm": "20260219_014224",
+      "transformer": "20260219_014224"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "XRP": {
+    "timestamp": "20260219_063854",
+    "artifact_timestamps": {
+      "dlinear": "20260219_063853",
+      "tcn": "20260219_063854",
+      "enhanced_lstm": "20260219_063854",
+      "transformer": "20260219_063854"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  }
+}

@@ -29,16 +29,34 @@ from collections import defaultdict
 try:
     from sklearn.linear_model import Ridge, ElasticNet
     from sklearn.ensemble import StackingRegressor, RandomForestRegressor
+    from sklearn.model_selection import TimeSeriesSplit
     from sklearn.metrics import mean_squared_error, mean_absolute_error
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
     print("Warning: scikit-learn not installed")
 
+try:
+    import lightgbm as lgb
+    _LGB_AVAILABLE = True
+except ImportError:
+    _LGB_AVAILABLE = False
+
 # Import our models
 from .transformer_model import TransformerForecaster, TENSORFLOW_AVAILABLE
 from .enhanced_lstm import EnhancedLSTMForecaster
 from .lightgbm_model import LightGBMForecaster, LIGHTGBM_AVAILABLE
+
+# Optional new models
+try:
+    from .dlinear_model import DLinearForecaster
+except ImportError:
+    DLinearForecaster = None
+
+try:
+    from .tcn_model import TCNForecaster
+except ImportError:
+    TCNForecaster = None
 
 
 class MarketRegimeDetector:
@@ -226,18 +244,24 @@ class AdvancedEnsemble:
         self.transformer: Optional[TransformerForecaster] = None
         self.enhanced_lstm: Optional[EnhancedLSTMForecaster] = None
         self.lightgbm: Optional[LightGBMForecaster] = None
+        self.dlinear = None   # Optional[DLinearForecaster]
+        self.tcn = None       # Optional[TCNForecaster]
 
         # Meta-learner for advanced stacking
         self.meta_model: Optional[Any] = None
+        self.meta_model_names: List[str] = []
+        self._weights_from_validation = False  # True when inverse-RMSE weights set
         self.regime_detector = MarketRegimeDetector(
             lookback_window=self.config.get('regime_lookback', 20)
         )
 
-        # Dynamic weights
+        # Dynamic weights (5 models)
         self.model_weights = {
-            'transformer': self.config.get('transformer_weight', 0.4),
-            'lstm': self.config.get('lstm_weight', 0.35),
-            'lightgbm': self.config.get('lightgbm_weight', 0.25)
+            'dlinear': self.config.get('dlinear_weight', 0.10),
+            'tcn': self.config.get('tcn_weight', 0.15),
+            'transformer': self.config.get('transformer_weight', 0.25),
+            'enhanced_lstm': self.config.get('lstm_weight', 0.25),
+            'lightgbm': self.config.get('lightgbm_weight', 0.25),
         }
 
         # Performance tracking
@@ -381,12 +405,38 @@ class AdvancedEnsemble:
             print("\\n[3/4] Training LightGBM model...")
             try:
                 self.lightgbm = LightGBMForecaster()
-                lgb_metrics = self.lightgbm.fit(
-                    X_train, y_train, X_val, y_val, feature_names
-                )
-                metrics['lightgbm'] = lgb_metrics
-                trained_models.append('lightgbm')
-                print(f"✅ LightGBM trained successfully")
+                # LightGBM needs 3D X and multi-horizon y — build from flat data
+                seq_len = self.config.get('sequence_length', 60)
+                horizons = self.config.get('horizons', [1, 7, 30])
+                max_h = max(horizons)
+
+                def _build_lgbm_data(X_flat, y_flat):
+                    n = len(y_flat)
+                    X_list, y_list = [], []
+                    for i in range(seq_len, n - max_h):
+                        X_list.append(X_flat[i - seq_len:i])
+                        y_list.append([y_flat[i + h] for h in horizons])
+                    if not X_list:
+                        return np.array([]), np.array([])
+                    return np.array(X_list), np.array(y_list)
+
+                X_train_lgb, y_train_lgb = _build_lgbm_data(X_train, y_train)
+                val_data = None
+                if X_val is not None and y_val is not None:
+                    X_val_lgb, y_val_lgb = _build_lgbm_data(X_val, y_val)
+                    if X_val_lgb.size > 0:
+                        val_data = (X_val_lgb, y_val_lgb)
+
+                if X_train_lgb.size > 0:
+                    lgb_metrics = self.lightgbm.fit(
+                        X_train_lgb, y_train_lgb, validation_data=val_data
+                    )
+                    metrics['lightgbm'] = lgb_metrics
+                    trained_models.append('lightgbm')
+                    print(f"✅ LightGBM trained successfully")
+                else:
+                    print(f"❌ LightGBM skipped: not enough data for sequences")
+                    self.lightgbm = None
 
             except Exception as e:
                 print(f"❌ LightGBM training failed: {e}")
@@ -430,58 +480,124 @@ class AdvancedEnsemble:
         y_val: Optional[np.ndarray] = None,
         price_history: Optional[np.ndarray] = None
     ) -> None:
-        """Train meta-learner for stacking"""
-        try:
-            # Get base model predictions
-            base_predictions = self._get_base_predictions(X_train, for_training=True)
+        """Train meta-learner on validation set predictions.
 
-            if len(base_predictions) < 2:
-                print("⚠️ Need at least 2 base models for meta-learning")
+        Base models were trained on X_train only, so their predictions on
+        X_val are genuinely out-of-sample.  We train the meta-learner on
+        these validation predictions and cross-validate with TimeSeriesSplit
+        to get an unbiased ensemble evaluation.
+
+        Falls back to weighted averaging if ensemble RMSE > best individual.
+        """
+        try:
+            if X_val is None or y_val is None:
+                print("Need validation data for meta-learner training")
                 return
 
-            # Stack predictions
-            stacked_features = np.column_stack(list(base_predictions.values()))
+            # Get base predictions on VALIDATION data (genuinely out-of-sample)
+            val_preds = self._get_base_predictions(X_val, for_training=False)
 
-            # Add regime features if available
-            if price_history is not None and len(price_history) >= len(y_train):
-                regime_features = self._extract_regime_features(
-                    price_history[-len(y_train):]
-                )
-                stacked_features = np.column_stack([stacked_features, regime_features])
+            if len(val_preds) < 2:
+                print("Need at least 2 base models for meta-learning")
+                return
 
-            # Create meta-learner
-            if self.config['meta_model_type'] == 'elastic_net':
-                self.meta_model = ElasticNet(
-                    alpha=self.config['meta_alpha'],
-                    l1_ratio=self.config['meta_l1_ratio'],
-                    random_state=42
-                )
-            elif self.config['meta_model_type'] == 'random_forest':
-                self.meta_model = RandomForestRegressor(
-                    n_estimators=100,
-                    max_depth=5,
-                    random_state=42
-                )
-            else:  # ridge
-                self.meta_model = Ridge(alpha=self.config['meta_alpha'])
+            # Align all predictions to same length
+            min_len = min(len(v) for v in val_preds.values())
+            trimmed = {k: v[:min_len] for k, v in val_preds.items()}
+            self.meta_model_names = list(trimmed.keys())
+            val_stacked = np.column_stack(list(trimmed.values()))
 
-            # Train meta-learner
-            self.meta_model.fit(stacked_features, y_train)
+            # Align y_val to match prediction length — predictions correspond
+            # to the END of the data (windowing drops the first seq_len samples)
+            y_meta = y_val[-min_len:] if len(y_val) >= min_len else y_val
+            n = min(len(y_meta), val_stacked.shape[0])
+            val_stacked = val_stacked[:n]
+            y_meta = y_meta[:n]
 
-            # Print meta-learner coefficients if available
-            if hasattr(self.meta_model, 'coef_'):
-                coef_names = list(base_predictions.keys())
-                if price_history is not None:
-                    coef_names.extend(['regime_trend', 'regime_volatility', 'regime_mean_reversion'])
+            # --- Cross-validate meta-learner on validation predictions ---
+            tscv = TimeSeriesSplit(n_splits=3)
+            oof_ens = np.full(n, np.nan)
 
-                print("📈 Meta-learner coefficients:")
-                for name, coef in zip(coef_names, self.meta_model.coef_):
-                    print(f"   {name}: {coef:.4f}")
+            for train_idx, test_idx in tscv.split(val_stacked):
+                if _LGB_AVAILABLE:
+                    fold_model = lgb.LGBMRegressor(
+                        n_estimators=100, max_depth=3, num_leaves=8,
+                        reg_alpha=1.0, reg_lambda=1.0,
+                        learning_rate=0.05, verbose=-1, random_state=42,
+                    )
+                else:
+                    fold_model = Ridge(alpha=1.0)
+                fold_model.fit(val_stacked[train_idx], y_meta[train_idx])
+                oof_ens[test_idx] = fold_model.predict(val_stacked[test_idx])
 
-            print("✅ Meta-learner trained successfully")
+            # Evaluate OOF ensemble vs individual models
+            valid = ~np.isnan(oof_ens)
+            if valid.sum() < 10:
+                print("Not enough OOF samples for reliable evaluation")
+                return
+
+            ens_rmse = np.sqrt(mean_squared_error(y_meta[valid], oof_ens[valid]))
+
+            best_ind_rmse = float('inf')
+            best_model = None
+            model_rmses = {}
+            for name, pred in trimmed.items():
+                rmse = np.sqrt(mean_squared_error(y_meta[valid], pred[:n][valid]))
+                model_rmses[name] = rmse
+                if rmse < best_ind_rmse:
+                    best_ind_rmse = rmse
+                    best_model = name
+
+            # Set performance-based weights: exclude models > 2x best RMSE,
+            # then use inverse-squared-RMSE for sharper differentiation
+            rmse_threshold = best_ind_rmse * 2.0
+            eligible = {k: v for k, v in model_rmses.items()
+                        if v <= rmse_threshold}
+            if not eligible:
+                eligible = {best_model: best_ind_rmse}
+
+            inv_sq = {k: 1.0 / max(v ** 2, 1e-16) for k, v in eligible.items()}
+            total_inv = sum(inv_sq.values())
+            perf_weights = {k: v / total_inv for k, v in inv_sq.items()}
+            # Zero out excluded models AND models not evaluated
+            for k in list(self.model_weights.keys()):
+                if k not in eligible:
+                    perf_weights[k] = 0.0
+            self.model_weights.update(perf_weights)
+            self._weights_from_validation = True
+            print(f"Performance-based weights (inverse-sq-RMSE, threshold={rmse_threshold:.3f}):")
+            for name, w in sorted(perf_weights.items(), key=lambda x: -x[1]):
+                status = "" if model_rmses[name] <= rmse_threshold else " [excluded]"
+                print(f"   {name}: {w:.3f} (RMSE={model_rmses[name]:.4f}){status}")
+
+            if ens_rmse > best_ind_rmse:
+                print(f"Meta-learner RMSE ({ens_rmse:.4f}) > best individual "
+                      f"({best_model}: {best_ind_rmse:.4f}). Using performance-"
+                      f"based weighted average instead.")
+                self.meta_model = None
+            else:
+                # Ensemble beats best individual — train final on ALL val predictions
+                if _LGB_AVAILABLE:
+                    self.meta_model = lgb.LGBMRegressor(
+                        n_estimators=100, max_depth=3, num_leaves=8,
+                        reg_alpha=1.0, reg_lambda=1.0,
+                        learning_rate=0.05, verbose=-1, random_state=42,
+                    )
+                else:
+                    self.meta_model = Ridge(alpha=1.0)
+                self.meta_model.fit(val_stacked, y_meta)
+
+                improvement = (best_ind_rmse - ens_rmse) / best_ind_rmse * 100
+                print(f"CV-stacked ensemble: RMSE={ens_rmse:.4f}, "
+                      f"best individual ({best_model})={best_ind_rmse:.4f}, "
+                      f"improvement={improvement:.1f}%")
+
+            print("Meta-learner training complete")
 
         except Exception as e:
-            print(f"❌ Meta-learner training failed: {e}")
+            print(f"Meta-learner training failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.meta_model = None
 
     def _get_base_predictions(
@@ -489,58 +605,82 @@ class AdvancedEnsemble:
         X: np.ndarray,
         for_training: bool = False
     ) -> Dict[str, np.ndarray]:
-        """Get predictions from all available base models"""
+        """Get predictions from all available base models.
+
+        X is flat 2D (n_samples, n_features).  Each model needs sequenced
+        input, so we build sequences here before predicting.
+        """
         predictions = {}
+        seq_len = self.config.get('sequence_length', 60)
+
+        def _extract_first_horizon(pred):
+            """Extract first-horizon predictions as a flat array."""
+            if isinstance(pred, dict):
+                return np.asarray(list(pred.values())[0]).flatten()
+            elif isinstance(pred, list):
+                return np.asarray(pred[0]).flatten()
+            elif isinstance(pred, np.ndarray) and pred.ndim == 2:
+                return pred[:, 0].flatten()
+            return np.asarray(pred).flatten()
+
+        # Build combined array for prepare_sequences (target col 0 = zeros)
+        dummy_targets = np.zeros((X.shape[0], 1))
+        combined = np.column_stack([dummy_targets, X])
 
         # Transformer predictions
         if self.transformer is not None:
             try:
-                if for_training:
-                    # Need to create sequences
-                    dummy_targets = np.zeros((X.shape[0], 1))
-                    X_seq, _ = self.transformer.prepare_sequences(
-                        np.column_stack([dummy_targets, X])
-                    )
-                    if len(X_seq) > 0:
-                        pred = self.transformer.predict(X_seq)
-                        if isinstance(pred, dict):
-                            # Multi-horizon, take first horizon
-                            pred = list(pred.values())[0]
-                        predictions['transformer'] = pred.flatten()
-                else:
-                    pred = self.transformer.predict(X)
-                    if isinstance(pred, dict):
-                        pred = list(pred.values())[0]
-                    predictions['transformer'] = pred.flatten()
+                X_seq, _ = self.transformer.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    # Use raw Keras model to avoid wrapper issues on Metal
+                    raw_pred = self.transformer.model.predict(X_seq, verbose=0)
+                    predictions['transformer'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: Transformer prediction failed: {e}")
 
         # Enhanced LSTM predictions
         if self.enhanced_lstm is not None:
             try:
-                if for_training:
-                    dummy_targets = np.zeros((X.shape[0], 1))
-                    X_seq, _ = self.enhanced_lstm.prepare_sequences(
-                        np.column_stack([dummy_targets, X])
-                    )
-                    if len(X_seq) > 0:
-                        pred = self.enhanced_lstm.predict(X_seq)
-                        if isinstance(pred, dict):
-                            pred = list(pred.values())[0]
-                        predictions['enhanced_lstm'] = pred.flatten()
-                else:
-                    pred = self.enhanced_lstm.predict(X)
-                    if isinstance(pred, dict):
-                        pred = list(pred.values())[0]
-                    predictions['enhanced_lstm'] = pred.flatten()
+                X_seq, _ = self.enhanced_lstm.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.enhanced_lstm.model.predict(X_seq, verbose=0)
+                    predictions['enhanced_lstm'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: Enhanced LSTM prediction failed: {e}")
 
-        # LightGBM predictions
+        # DLinear predictions
+        if self.dlinear is not None:
+            try:
+                X_seq, _ = self.dlinear.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.dlinear.model.predict(X_seq, verbose=0)
+                    predictions['dlinear'] = _extract_first_horizon(raw_pred)
+            except Exception as e:
+                print(f"Warning: DLinear prediction failed: {e}")
+
+        # TCN predictions
+        if self.tcn is not None:
+            try:
+                X_seq, _ = self.tcn.prepare_sequences(combined)
+                if len(X_seq) > 0:
+                    raw_pred = self.tcn.model.predict(X_seq, verbose=0)
+                    predictions['tcn'] = _extract_first_horizon(raw_pred)
+            except Exception as e:
+                print(f"Warning: TCN prediction failed: {e}")
+
+        # LightGBM predictions — needs 3D sequenced input
         if self.lightgbm is not None:
             try:
-                pred = self.lightgbm.predict(X)
-                predictions['lightgbm'] = pred.flatten()
+                horizons = self.config.get('horizons', [1, 7, 30])
+                max_h = max(horizons)
+                n = X.shape[0]
+                X_list = []
+                for i in range(seq_len, n - max_h):
+                    X_list.append(X[i - seq_len:i])
+                if X_list:
+                    X_3d = np.array(X_list)
+                    raw_pred = self.lightgbm.predict(X_3d)
+                    predictions['lightgbm'] = _extract_first_horizon(raw_pred)
             except Exception as e:
                 print(f"Warning: LightGBM prediction failed: {e}")
 
@@ -559,34 +699,24 @@ class AdvancedEnsemble:
         return np.array(features).reshape(1, -1)
 
     def _initialize_regime_weights(self, price_history: np.ndarray) -> None:
-        """Initialize weights based on current market regime"""
+        """Initialize weights based on current market regime.
+
+        Skipped if validation-based performance weights were already set
+        by _train_meta_learner (those are more informative than static
+        regime priors).
+        """
+        if self._weights_from_validation:
+            print("Skipping regime weights — using validation performance weights")
+            return
+
         regime_info = self.regime_detector.detect_regime(price_history)
         regime = regime_info['regime']
 
-        # Adjust weights based on regime
-        if regime == 'trending':
-            # Transformer and LSTM better at capturing trends
-            self.model_weights.update({
-                'transformer': 0.45,
-                'enhanced_lstm': 0.40,
-                'lightgbm': 0.15
-            })
-        elif regime == 'ranging':
-            # LightGBM better at mean reversion
-            self.model_weights.update({
-                'transformer': 0.25,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.45
-            })
-        elif regime == 'volatile':
-            # More balanced approach in volatile markets
-            self.model_weights.update({
-                'transformer': 0.35,
-                'enhanced_lstm': 0.35,
-                'lightgbm': 0.30
-            })
+        # Use centralized regime weights
+        regime_weights = self._get_regime_weights(regime)
+        self.model_weights.update(regime_weights)
 
-        print(f"🎯 Initialized weights for {regime} market:")
+        print(f"Initialized weights for {regime} market:")
         for model, weight in self.model_weights.items():
             print(f"   {model}: {weight:.3f}")
 
@@ -615,14 +745,30 @@ class AdvancedEnsemble:
         if not base_predictions:
             raise ValueError("No trained models available for prediction")
 
+        # Trim all predictions to same length (windowing may differ slightly)
+        min_len = min(len(v) for v in base_predictions.values())
+        base_predictions = {k: v[:min_len] for k, v in base_predictions.items()}
+
         # Update weights based on current regime
         if price_history is not None and self.config['use_regime_weighting']:
             self._update_regime_weights(price_history)
 
         # Combine predictions
         if self.meta_model is not None:
-            # Use meta-learner
-            stacked_features = np.column_stack(list(base_predictions.values()))
+            # Use meta-learner — stack columns in same order as training
+            if hasattr(self, 'meta_model_names') and self.meta_model_names:
+                ordered = [base_predictions[n] for n in self.meta_model_names
+                           if n in base_predictions]
+                if len(ordered) != len(self.meta_model_names):
+                    # Missing models — fall back to weighted average
+                    ensemble_pred = self._weighted_average(base_predictions)
+                    if return_individual:
+                        base_predictions['ensemble'] = ensemble_pred
+                        return base_predictions
+                    return ensemble_pred
+                stacked_features = np.column_stack(ordered)
+            else:
+                stacked_features = np.column_stack(list(base_predictions.values()))
 
             # Add regime features
             if price_history is not None:
@@ -648,7 +794,14 @@ class AdvancedEnsemble:
         return ensemble_pred
 
     def _update_regime_weights(self, price_history: np.ndarray) -> None:
-        """Update model weights based on current market regime"""
+        """Update model weights based on current market regime.
+
+        Skipped when validation-based performance weights are active —
+        those are data-driven and more reliable than static regime priors.
+        """
+        if self._weights_from_validation:
+            return
+
         regime_info = self.regime_detector.detect_regime(price_history)
         regime = regime_info['regime']
         confidence = regime_info['confidence']
@@ -678,28 +831,28 @@ class AdvancedEnsemble:
                 self.model_weights[model] /= total_weight
 
     def _get_regime_weights(self, regime: str) -> Dict[str, float]:
-        """Get optimal weights for a given market regime"""
+        """Get optimal weights for a given market regime (5 models)"""
         regime_weights = {
             'trending': {
-                'transformer': 0.45,
-                'enhanced_lstm': 0.40,
-                'lightgbm': 0.15
+                'dlinear': 0.10, 'tcn': 0.15,
+                'transformer': 0.30, 'enhanced_lstm': 0.30,
+                'lightgbm': 0.15,
             },
             'ranging': {
-                'transformer': 0.25,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.45
+                'dlinear': 0.15, 'tcn': 0.15,
+                'transformer': 0.15, 'enhanced_lstm': 0.20,
+                'lightgbm': 0.35,
             },
             'volatile': {
-                'transformer': 0.35,
-                'enhanced_lstm': 0.35,
-                'lightgbm': 0.30
+                'dlinear': 0.15, 'tcn': 0.15,
+                'transformer': 0.25, 'enhanced_lstm': 0.25,
+                'lightgbm': 0.20,
             },
             'mean_reverting': {
-                'transformer': 0.20,
-                'enhanced_lstm': 0.30,
-                'lightgbm': 0.50
-            }
+                'dlinear': 0.10, 'tcn': 0.10,
+                'transformer': 0.15, 'enhanced_lstm': 0.25,
+                'lightgbm': 0.40,
+            },
         }
 
         return regime_weights.get(regime, self.model_weights)
@@ -869,22 +1022,37 @@ class AdvancedEnsemble:
 
         ensemble_pred = individual_preds.pop('ensemble', None)
 
+        # Predictions are shorter than y_test due to windowing (seq_len + max_horizon
+        # samples lost).  Align y_test to the END of the array so predictions
+        # correspond to the most recent data points.
+        all_preds = list(individual_preds.values())
+        if ensemble_pred is not None:
+            all_preds.append(ensemble_pred)
+        if not all_preds:
+            return {}
+        min_len = min(len(p) for p in all_preds)
+        y_eval = y_test[-min_len:]
+
         # Evaluate each model
         for model, pred in individual_preds.items():
-            if len(pred) == len(y_test):
-                rmse = np.sqrt(mean_squared_error(y_test, pred))
-                mae = mean_absolute_error(y_test, pred)
-                mape = np.mean(np.abs((y_test - pred) / y_test)) * 100
+            pred_trimmed = pred[:min_len]
+            rmse = np.sqrt(mean_squared_error(y_eval, pred_trimmed))
+            mae = mean_absolute_error(y_eval, pred_trimmed)
+            # Avoid division by zero for MAPE
+            mask = np.abs(y_eval) > 1e-8
+            mape = np.mean(np.abs((y_eval[mask] - pred_trimmed[mask]) / y_eval[mask])) * 100 if mask.any() else 0.0
 
-                results[f'{model}_rmse'] = rmse
-                results[f'{model}_mae'] = mae
-                results[f'{model}_mape'] = mape
+            results[f'{model}_rmse'] = rmse
+            results[f'{model}_mae'] = mae
+            results[f'{model}_mape'] = mape
 
         # Evaluate ensemble
-        if ensemble_pred is not None and len(ensemble_pred) == len(y_test):
-            ensemble_rmse = np.sqrt(mean_squared_error(y_test, ensemble_pred))
-            ensemble_mae = mean_absolute_error(y_test, ensemble_pred)
-            ensemble_mape = np.mean(np.abs((y_test - ensemble_pred) / y_test)) * 100
+        if ensemble_pred is not None:
+            ens_trimmed = ensemble_pred[:min_len]
+            ensemble_rmse = np.sqrt(mean_squared_error(y_eval, ens_trimmed))
+            ensemble_mae = mean_absolute_error(y_eval, ens_trimmed)
+            mask = np.abs(y_eval) > 1e-8
+            ensemble_mape = np.mean(np.abs((y_eval[mask] - ens_trimmed[mask]) / y_eval[mask])) * 100 if mask.any() else 0.0
 
             results['ensemble_rmse'] = ensemble_rmse
             results['ensemble_mae'] = ensemble_mae
@@ -897,7 +1065,7 @@ class AdvancedEnsemble:
                 improvement = (best_individual_rmse - ensemble_rmse) / best_individual_rmse * 100
                 results['improvement_pct'] = improvement
 
-                print(f"🎯 Ensemble improves over best individual model by {improvement:.2f}%")
+                print(f"Ensemble improves over best individual model by {improvement:.2f}%")
 
         return results
 
@@ -955,6 +1123,7 @@ class AdvancedEnsemble:
             'timestamp': timestamp,
             'config': self.config,
             'model_weights': self.model_weights,
+            'meta_model_names': self.meta_model_names,
             'saved_models': saved_models,
             'performance_history': {
                 k: list(v) for k, v in self.performance_history.items()
@@ -988,6 +1157,7 @@ class AdvancedEnsemble:
                 data = json.load(f)
                 self.config = data.get('config', self.config)
                 self.model_weights = data.get('model_weights', self.model_weights)
+                self.meta_model_names = data.get('meta_model_names', [])
                 performance_hist = data.get('performance_history', {})
                 self.performance_history = defaultdict(list, {
                     k: v for k, v in performance_hist.items()

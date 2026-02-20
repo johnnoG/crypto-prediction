@@ -167,7 +167,11 @@ class EnhancedLSTMForecaster:
         Returns:
             Compiled Keras model
         """
+        from tensorflow.keras import regularizers
+
         seq_len, n_features = input_shape
+        l2_reg = self.config.get('l2_reg', 0.0)
+        kernel_reg = regularizers.l2(l2_reg) if l2_reg > 0 else None
 
         # Input layer
         inputs = layers.Input(shape=input_shape, name='input')
@@ -197,7 +201,8 @@ class EnhancedLSTMForecaster:
                             units,
                             return_sequences=return_sequences,
                             dropout=self.config['dropout_rate'],
-                            recurrent_dropout=self.config['recurrent_dropout']
+                            recurrent_dropout=self.config['recurrent_dropout'],
+                            kernel_regularizer=kernel_reg,
                         ),
                         name=f'bidirectional_lstm_{i}'
                     )(x)
@@ -207,6 +212,7 @@ class EnhancedLSTMForecaster:
                         return_sequences=return_sequences,
                         dropout=self.config['dropout_rate'],
                         recurrent_dropout=self.config['recurrent_dropout'],
+                        kernel_regularizer=kernel_reg,
                         name=f'lstm_{i}'
                     )(x)
 
@@ -232,7 +238,9 @@ class EnhancedLSTMForecaster:
 
         # Dense layers
         for i, units in enumerate(self.config['dense_units']):
-            x = layers.Dense(units, activation='relu', name=f'dense_{i}')(x)
+            x = layers.Dense(units, activation='relu',
+                             kernel_regularizer=kernel_reg,
+                             name=f'dense_{i}')(x)
             x = layers.Dropout(self.config['dropout_rate'], name=f'dropout_dense_{i}')(x)
 
             if self.config['use_layer_norm']:
@@ -275,7 +283,7 @@ class EnhancedLSTMForecaster:
             losses = {f'output_{h}d': 'huber' for h in self.config['multi_step']}
 
             # Weight shorter horizons more heavily
-            loss_weights = {f'output_{h}d': 1.0 / np.sqrt(h) for h in self.config['multi_step']}
+            loss_weights = {f'output_{h}d': float(1.0 / np.sqrt(h)) for h in self.config['multi_step']}
 
             model.compile(
                 optimizer=optimizer,

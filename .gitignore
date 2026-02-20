@@ -31,6 +31,7 @@ env/
 ENV/
 .venv
 ml_env/
+tf-gpu-env/
 
 # IDEs
 .vscode/
@@ -91,11 +92,3 @@ data_analysis/*.json
 # MLflow
 mlruns*/
 mlflow.db
-
-# Training output
-training_output/
-models/artifacts/**/*.h5
-models/artifacts/**/*.txt
-models/artifacts/**/*.pkl
-models/artifacts/**/*.json
-!models/artifacts/.gitkeep

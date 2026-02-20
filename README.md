@@ -1,12 +1,12 @@
 # Crypto Prediction & Real-Time Dashboard
 
-Production-grade cryptocurrency price prediction system combining deep learning, gradient boosting, and ensemble methods with a real-time trading dashboard. Trained on 104 cryptocurrencies with 150+ engineered features.
+Production-grade cryptocurrency price prediction system combining deep learning, gradient boosting, and ensemble methods with a real-time trading dashboard. Five model architectures trained on 5 cryptocurrencies (BTC, ETH, LTC, XRP, DOGE) with 150+ engineered features across 104 coins.
 
 ## Overview
 
 An end-to-end ML pipeline and web application for multi-horizon cryptocurrency price forecasting:
 
-- **Three Model Architectures** — Bidirectional LSTM with attention, Transformer with causal masking, and LightGBM gradient boosting, combined through an intelligent ensemble with market regime detection
+- **Five Model Architectures** — DLinear baseline, Temporal Convolutional Network (TCN), Bidirectional LSTM with attention, Transformer with causal masking, and LightGBM gradient boosting, combined through a CV-stacked ensemble with market regime detection
 - **150+ Engineered Features** — Technical indicators, momentum oscillators, volatility metrics, volume analysis, and statistical features for 104 cryptocurrencies
 - **Production Training Pipeline** — Automated training with chronological splits, RobustScaler preprocessing, multi-step forecasting (1/7/30 day horizons), and 10 diagnostic visualizations per training run
 - **MLflow Experiment Tracking** — Full experiment logging with model versioning, metric tracking, and artifact management
@@ -28,23 +28,22 @@ docker-compose up -d
 #   API Docs:  http://localhost:8000/docs
 ```
 
-### Train Models (Google Colab with GPU recommended)
+### Train Models (GPU recommended: Colab T4/A100 or Apple Silicon with Metal)
 
 ```bash
-# Full production training for BTC and ETH
-python models/src/train_production.py --crypto BTC,ETH
+# Full production training for all 5 trained coins
+python3 models/src/train_production.py --crypto BTC,ETH,LTC,XRP,DOGE
 
 # Quick validation run
-python models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
+python3 models/src/train_production.py --crypto BTC --epochs 5 --no-ensemble
 
-# With Optuna hyperparameter tuning (20 trials per model)
-python models/src/train_production.py --crypto BTC --tune --tune-trials 20
+# With Optuna hyperparameter tuning (all 5 models)
+python3 models/src/train_production.py --crypto BTC --tune --tune-trials 20 \
+    --tune-models dlinear,tcn,lstm,transformer,lightgbm
 
-# Tune LightGBM only (fast) + walk-forward validation
-python models/src/train_production.py --crypto BTC --tune --tune-models lightgbm --walk-forward
-
-# Full professional pipeline
-python models/src/train_production.py --crypto BTC --tune --walk-forward --epochs 150
+# Full professional pipeline (tuning + walk-forward + all coins)
+python3 models/src/train_production.py --crypto BTC,ETH,LTC,XRP,DOGE --tune --tune-trials 20 \
+    --tune-models dlinear,tcn,lstm,transformer,lightgbm --walk-forward --epochs 150
 ```
 
 Training outputs:
@@ -70,17 +69,21 @@ crypto-prediction/
 │
 ├── models/                           # ML models, training, and deployment
 │   ├── MODEL_ARCHITECTURE_AND_TRAINING.md  # Detailed model documentation
-│   ├── artifacts/                    # Saved model weights and metadata
+│   ├── artifacts/                    # Saved model weights and metadata (5 coins)
+│   │   ├── dlinear/
+│   │   ├── tcn/
 │   │   ├── enhanced_lstm/
 │   │   ├── transformer/
 │   │   ├── lightgbm/
 │   │   └── advanced_ensemble/
 │   └── src/
 │       ├── models/                   # Model implementations
-│       │   ├── enhanced_lstm.py      # Bidirectional LSTM + attention + residual
+│       │   ├── dlinear_model.py      # DLinear trend/seasonal decomposition baseline
+│       │   ├── tcn_model.py          # Temporal Convolutional Network (dilated causal)
+│       │   ├── enhanced_lstm.py      # Bidirectional LSTM + attention + residual + L2
 │       │   ├── transformer_model.py  # Multi-head self-attention transformer
-│       │   ├── lightgbm_model.py     # Gradient boosting forecaster
-│       │   └── advanced_ensemble.py  # Ensemble with regime detection
+│       │   ├── lightgbm_model.py     # Gradient boosting with summary statistics
+│       │   └── advanced_ensemble.py  # CV-stacked ensemble with regime detection
 │       ├── training/                 # Training infrastructure
 │       │   ├── hyperopt_pipeline.py  # Optuna hyperparameter optimization
 │       │   ├── production_pipeline.py # End-to-end training pipeline
@@ -137,30 +140,29 @@ crypto-prediction/
 Raw Parquet Data (5600+ rows, 150+ features per crypto)
     |
     v
-Data Cleaning --> Feature Selection (top 60 by correlation)
+Chronological Split --> Feature Selection (top 80 by mutual info, train only)
     |
     v
-RobustScaler (fit on train only)
+Cross-Asset Features (ETH indicators for BTC) --> Log-Return Targets
     |
     v
-Chronological Split: 70% train / 15% val / 15% test
+RobustScaler (fit on train only) --> Data Augmentation (jitter + scale, 3x)
     |
     v
 Sliding Window Sequences (60 days lookback)
     |
     v
-+------------------+--------------------+------------------+
-|   Enhanced LSTM  |    Transformer     |    LightGBM      |
-| Bidirectional    | Multi-head         | Gradient boosted  |
-| Attention + Res  | Self-attention     | Decision trees   |
-| [128, 64, 32]    | d=128, 4 heads     | 1000 estimators  |
-+------------------+--------------------+------------------+
-    |                    |                    |
-    v                    v                    v
-+--------------------------------------------------------+
-|            Advanced Ensemble                            |
-|  Market regime detection + Meta-learner + Online adapt  |
-+--------------------------------------------------------+
++---------+--------+------------------+--------------------+------------------+
+| DLinear |  TCN   |   Enhanced LSTM  |    Transformer     |    LightGBM      |
+| Trend/  | Causal | Bidirectional    | Multi-head         | Summary stats    |
+| Seasonal| Conv   | Attention + L2   | Self-attention     | (5 per feature)  |
++---------+--------+------------------+--------------------+------------------+
+    |         |          |                    |                    |
+    v         v          v                    v                    v
++--------------------------------------------------------------------+
+|               CV-Stacked Ensemble (5 models)                       |
+|  OOF meta-learner + Market regime detection + Online adaptation    |
++--------------------------------------------------------------------+
     |
     v
 Multi-Horizon Predictions: 1-day, 7-day, 30-day
@@ -178,7 +180,7 @@ Each training run generates 10 diagnostic plots:
 | Plot | Description |
 |------|-------------|
 | `loss_curves.png` | Train vs validation loss for each model |
-| `metrics_progression.png` | MAE/MSE per horizon over training |
+| `metrics_progression.png` | Per-horizon loss progression over training |
 | `learning_rates.png` | LR schedules (warmup, decay, plateau) |
 | `attention_heatmap.png` | LSTM attention weights over timesteps |
 | `feature_importance.png` | Top 30 LightGBM features |
@@ -194,7 +196,7 @@ Each training run generates 10 diagnostic plots:
 
 | Component | Technology |
 |-----------|------------|
-| Deep Learning | TensorFlow/Keras (LSTM, Transformer) |
+| Deep Learning | TensorFlow/Keras (DLinear, TCN, LSTM, Transformer) |
 | Gradient Boosting | LightGBM, XGBoost |
 | Hyperparameter Tuning | Optuna (Bayesian optimization) |
 | Experiment Tracking | MLflow (logging, model registry) |
@@ -258,7 +260,7 @@ The system processes data for 104 cryptocurrencies spanning 2010-2026:
 - Python 3.11+ with pip
 - Node.js 18+
 - Docker & Docker Compose
-- GPU recommended for model training (Google Colab T4/A100 works well)
+- GPU recommended for model training (Google Colab T4/A100 or Apple Silicon Mac with Metal)
 
 ### Local Setup
 
@@ -274,6 +276,11 @@ npm install && npm run dev
 
 # ML environment
 pip install -r requirements.txt  # Root requirements.txt
+
+# ML environment with Apple Silicon GPU (requires Python 3.12)
+python3.12 -m venv tf-gpu-env && source tf-gpu-env/bin/activate
+pip install tensorflow==2.18 tensorflow-metal
+pip install -r requirements.txt
 
 # Start infrastructure
 docker-compose up -d  # PostgreSQL + Redis
@@ -312,19 +319,38 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 ### Completed
 
 - **Phase 1: Data Analysis** — 104 cryptocurrencies analyzed, 150+ features engineered, statistical analysis (PCA, clustering, risk metrics), professional visualizations
-- **Phase 2: ML Models** — LSTM, Transformer, LightGBM, and Ensemble models fully implemented with multi-step forecasting, attention mechanisms, and uncertainty quantification
+- **Phase 2: ML Models** — DLinear, TCN, LSTM, Transformer, LightGBM, and CV-stacked Ensemble (5 models) with multi-step forecasting, log-return targets, data augmentation, cross-asset features, and uncertainty quantification
 - **Phase 3: MLflow & Deployment** — Experiment tracking, model versioning, blue-green deployment, A/B testing framework, performance monitoring, training dashboards
 - **Infrastructure** — Docker stack, PostgreSQL, Redis, FastAPI, React dashboard, authentication, real-time data feeds
+- **Multi-Coin Production Training** — BTC, ETH, LTC, XRP, and DOGE fully trained with Optuna tuning (20 trials x 5 models), walk-forward validation, MC dropout uncertainty, 10 diagnostic visualizations per coin, subprocess isolation for memory management
+- **Overfitting Fixes** — Log-return targets, mutual info feature selection (train-only), reduced model capacity, L2 regularization, data augmentation, summary stats for LightGBM — all models now show < 2x train/val gap
+- **Ensemble & Metric Fixes** — Performance-based inverse-sq-RMSE ensemble weighting (replaces static regime weights), fixed directional accuracy for log-return targets, MCDropout class for Transformer uncertainty
+
+### Training Results Summary (Feb 2026 — Run 2, post-fixes)
+
+| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d) |
+|------|-----------|-----------|---------------|------------------|--------------|
+| BTC | LightGBM | 0.716 | 0.739 | -3.3% | 53.3% (LightGBM) |
+| ETH | LSTM | 0.948 | 0.958 | -1.1% | 51.5% (DLinear) |
+| LTC | TCN | 0.818 | 0.821 | -0.3% | 54.0% (DLinear) |
+| XRP | LSTM | 0.900 | 0.933 | -3.6% | 51.8% (Transformer) |
+| DOGE | LSTM | 1.085 | 1.097 | -1.1% | 57.0% (Transformer) |
+
+Key improvements from Run 1: fixed directional accuracy calculation (LightGBM was showing 5-16%, now correct ~50%), ensemble uses performance-based inverse-sq-RMSE weights (was static regime weights causing -158% regression), all train/val gaps < 2x.
+
+See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) for detailed results, hyperparameters, and analysis.
 
 ### In Progress
 
-- Production model training on GPU (BTC, ETH, then expanding to more coins)
+- Transformer MC dropout uncertainty (MCDropout class added but output-head-only dropout produces near-zero CI for most coins)
 - WebSocket streaming integration in frontend
 - Advanced analytics dashboard with live predictions
 
 ### Planned
 
 - Real-time model serving with FastAPI inference endpoint
+- Ensemble improvements (meta-learner still falls back to weighted average on all coins)
+- Expand to more coins (BNB, SOL, ADA, LINK, DOT)
 - Portfolio optimization with trained models
 - Automated retraining pipeline with drift detection
 - Mobile-responsive PWA

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import PriceTicker from '../PriceTicker';
 import RealTimeCryptoGrid from '../RealTimeCryptoGrid';
 import ForecastPanel from '../ForecastPanel';
@@ -7,6 +8,7 @@ import ScrollToTop from '../ScrollToTop';
 
 
 function HomePage() {
+  const { isAuthenticated } = useAuth();
   const [selectedCrypto, setSelectedCrypto] = useState<string | null>(null);
   const scrollToSection = useCallback((sectionId: string) => {
     const section = document.getElementById(sectionId);
@@ -136,25 +138,27 @@ function HomePage() {
               </div>
             </div>
             
-            {/* Scroll Indicator */}
-            <div className="mt-16 animate-bounce">
-              <button 
-                type="button"
-                onClick={() => scrollToSection('markets')}
-                className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                aria-label="Scroll to markets"
-              >
-                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                </svg>
-              </button>
-            </div>
+            {/* Scroll Indicator — only when content below is visible */}
+            {isAuthenticated && (
+              <div className="mt-16 animate-bounce">
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('markets')}
+                  className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  aria-label="Scroll to markets"
+                >
+                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      {/* Main Content - Continuous Scroll */}
-      <main className="relative">
+      {/* Main Content - only visible when authenticated */}
+      {isAuthenticated && <main className="relative">
         {/* Markets Section */}
         <section id="markets" className="py-24 relative overflow-hidden">
           {/* Background */}
@@ -631,10 +635,10 @@ function HomePage() {
             </div>
           </div>
         </section>
-      </main>
-      
+      </main>}
+
       {/* Scroll to Top Button */}
-      <ScrollToTop />
+      {isAuthenticated && <ScrollToTop />}
     </div>
   );
 }

@@ -43,6 +43,7 @@ from dataclasses import dataclass, asdict
 
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.preprocessing import RobustScaler
 from sklearn.feature_selection import mutual_info_regression
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -2111,6 +2112,15 @@ def train_single_crypto(config: TrainingConfig):
     loader = ProductionDataLoader(config)
     data = loader.load_and_prepare()
     _log_memory("after data load")
+
+    # Save preprocessing artifacts for inference
+    preprocess_dir = Path(config.artifacts_dir) / "preprocessing" / config.crypto
+    preprocess_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(loader.feature_scaler, preprocess_dir / "feature_scaler.joblib")
+    joblib.dump(loader.target_scaler, preprocess_dir / "target_scaler.joblib")
+    with open(preprocess_dir / "feature_names.json", "w") as f:
+        json.dump(loader.feature_names, f, indent=2)
+    logger.info(f"Saved preprocessing artifacts to {preprocess_dir}")
 
     # 2. Hyperparameter tuning (optional — each model in its own subprocess)
     tuned_configs = {}

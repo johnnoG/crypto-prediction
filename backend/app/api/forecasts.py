@@ -555,78 +555,88 @@ async def get_forecasts(
         return cached_result
     
     try:
-        # Get current prices for baseline calculations
-        try:
-            from services.prices_service import get_simple_price_with_cache
-        except ImportError:
-            from services.prices_service import get_simple_price_with_cache
-        try:
-            current_prices = await get_simple_price_with_cache(ids=ids, vs_currencies="usd")
-        except HTTPException as price_error:
-            print(f"[WARNING] Price fetch failed: {price_error.detail}")
-            current_prices = {}
-        
         ids_list = [id.strip() for id in ids.split(",") if id.strip()]
         forecasts = {}
         base_date = datetime.utcnow()
-        
-        # Also get real-time market data for accurate current prices
+        ML_MODEL_TYPES = {'lightgbm', 'lstm', 'transformer', 'tcn', 'dlinear', 'ml_ensemble'}
+        is_ml_model = model in ML_MODEL_TYPES and ML_MODELS_AVAILABLE
+
+        # Imports for CoinGecko price fetching
         try:
-            from services.prices_service import get_market_data_with_cache
+            from services.prices_service import get_simple_price_with_cache, get_market_data_with_cache
         except ImportError:
-            from services.prices_service import get_market_data_with_cache
-        
-        try:
-            market_data = await get_market_data_with_cache(ids=ids, vs_currency="usd")
-        except HTTPException as market_error:
-            print(f"[WARNING] Market data fetch failed: {market_error.detail}")
-            market_data = {}
-        
+            from services.prices_service import get_simple_price_with_cache, get_market_data_with_cache
+
+        current_prices = {}
+        market_data = {}
+
+        async def _fetch_coingecko_prices():
+            nonlocal current_prices, market_data
+            try:
+                current_prices = await get_simple_price_with_cache(ids=ids, vs_currencies="usd")
+            except HTTPException as price_error:
+                print(f"[WARNING] Price fetch failed: {price_error.detail}")
+            try:
+                market_data = await get_market_data_with_cache(ids=ids, vs_currency="usd")
+            except HTTPException as market_error:
+                print(f"[WARNING] Market data fetch failed: {market_error.detail}")
+
+        if is_ml_model:
+            # For ML models, use a short timeout — fall back to parquet prices if CoinGecko is slow
+            try:
+                await asyncio.wait_for(_fetch_coingecko_prices(), timeout=5.0)
+            except (asyncio.TimeoutError, Exception) as e:
+                print(f"[INFO] CoinGecko fast-fetch timed out for ML model ({type(e).__name__}), will use parquet fallback")
+                current_prices = {}
+                market_data = {}
+        else:
+            await _fetch_coingecko_prices()
+
         skipped_assets: list[str] = []
         cache_only_mode = _is_coingecko_rate_limited()
-        for crypto_id in ids_list:
+
+        async def _process_one(crypto_id: str) -> Optional[Tuple[str, Any]]:
+            """Process a single crypto and return (crypto_id, forecast_result) or None."""
             try:
                 print(f"[DEBUG] Processing {crypto_id}...")
-                
-                # First try to get real-time price from market data (most accurate)
+
+                # Resolve current price
                 if crypto_id in market_data and market_data[crypto_id].get("price", 0) > 0:
                     current_price = market_data[crypto_id]["price"]
                     print(f"[SUCCESS] Using real-time market price for {crypto_id}: ${current_price}")
-                # Fallback to simple price endpoint
                 elif current_prices.get(crypto_id, {}).get("usd", 0) > 0:
                     current_price = current_prices.get(crypto_id, {}).get("usd", 0)
                     print(f"[INFO] Using cached price for {crypto_id}: ${current_price}")
                 else:
-                    print(f"[WARNING] No price data for {crypto_id}, skipping...")
-                    skipped_assets.append(crypto_id)
-                    continue  # Skip this crypto instead of failing entire request
-                
-                # Fetch real historical OHLC data from CoinGecko with timeout
-                if cache_only_mode:
-                    historical_prices = None
-                else:
-                    print(f"[DEBUG] Fetching OHLC data for {crypto_id}...")
-                    try:
-                        historical_prices = await asyncio.wait_for(
-                            fetch_ohlc_data(crypto_id, days=90),
-                            timeout=15.0  # 15 second timeout per crypto
-                        )
-                    except asyncio.TimeoutError:
-                        print(f"[WARNING] Timeout fetching OHLC for {crypto_id}, using synthetic")
-                        historical_prices = None
-                    if _is_coingecko_rate_limited():
-                        cache_only_mode = True
-                
-                # Use synthetic history as fallback when APIs are rate limited
-                if not historical_prices or len(historical_prices) < 20:
-                    print(f"[WARNING] No OHLC data available for {crypto_id}, using synthetic history")
+                    fallback = ml_forecast_service.get_fallback_price(crypto_id) if ML_MODELS_AVAILABLE else None
+                    if fallback:
+                        current_price = fallback
+                        print(f"[INFO] Using parquet fallback price for {crypto_id}: ${current_price}")
+                    else:
+                        print(f"[WARNING] No price data for {crypto_id}, skipping...")
+                        skipped_assets.append(crypto_id)
+                        return None
+
+                # ML models use parquet features — skip OHLC fetch
+                if is_ml_model:
                     historical_prices = generate_synthetic_history(current_price, days=90)
-                    print(f"[INFO] Generated {len(historical_prices)} synthetic price points for {crypto_id}")
                 else:
-                    print(f"[SUCCESS] Using real OHLC data for {crypto_id} ({len(historical_prices)} data points)")
-                
-                # Check if ML model requested and available
-                if model in ['lightgbm', 'lstm', 'ml_ensemble'] and ML_MODELS_AVAILABLE:
+                    historical_prices = None
+                    if not cache_only_mode:
+                        print(f"[DEBUG] Fetching OHLC data for {crypto_id}...")
+                        try:
+                            historical_prices = await asyncio.wait_for(
+                                fetch_ohlc_data(crypto_id, days=90),
+                                timeout=15.0
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"[WARNING] Timeout fetching OHLC for {crypto_id}, using synthetic")
+                            historical_prices = None
+                    if not historical_prices or len(historical_prices) < 20:
+                        historical_prices = generate_synthetic_history(current_price, days=90)
+
+                # Generate forecast
+                if is_ml_model:
                     print(f"[DEBUG] Generating ML forecast for {crypto_id} using {model}...")
                     try:
                         forecast_result = await ml_forecast_service.generate_ml_forecast(
@@ -634,7 +644,7 @@ async def get_forecasts(
                             current_price=current_price,
                             historical_prices=historical_prices,
                             days=days,
-                            model_type=model.replace('ml_', '')  # 'ml_ensemble' -> 'ensemble'
+                            model_type=model.replace('ml_', '')
                         )
                         print(f"[SUCCESS] Generated ML forecast for {crypto_id}")
                     except Exception as ml_error:
@@ -645,41 +655,37 @@ async def get_forecasts(
                             historical_prices=historical_prices,
                             days=days,
                             model_type='baseline'
-                    )
-                    
-                    # Store the ML forecast result
-                    forecasts[crypto_id] = forecast_result
-                else:
-                    # Use professional forecasting service with real ARIMA and backtesting
-                    print(f"[DEBUG] Generating forecast for {crypto_id}...")
-                    try:
-                        forecast_result = generate_professional_forecast(
-                            coin_id=crypto_id,
-                            current_price=current_price,
-                            historical_prices=historical_prices,
-                            days=days,
-                            model_type=model
                         )
-                        print(f"[SUCCESS] Generated forecast for {crypto_id}")
-                        forecasts[crypto_id] = forecast_result
-                    except HTTPException:
-                        raise
-                    except asyncio.TimeoutError:
-                        print(f"[ERROR] Timeout generating forecast for {crypto_id}")
-                        # Skip this crypto instead of failing entire request
-                        continue
-                    except Exception as forecast_error:
-                        print(f"[ERROR] Forecast generation failed for {crypto_id}: {forecast_error}")
-                        # Skip this crypto instead of failing entire request
-                        continue
+                    return (crypto_id, forecast_result)
+                else:
+                    print(f"[DEBUG] Generating forecast for {crypto_id}...")
+                    forecast_result = generate_professional_forecast(
+                        coin_id=crypto_id,
+                        current_price=current_price,
+                        historical_prices=historical_prices,
+                        days=days,
+                        model_type=model
+                    )
+                    print(f"[SUCCESS] Generated forecast for {crypto_id}")
+                    return (crypto_id, forecast_result)
+
             except HTTPException:
                 raise
-            except asyncio.TimeoutError:
-                print(f"[ERROR] Timeout processing {crypto_id}")
-                continue
             except Exception as crypto_error:
                 print(f"[ERROR] Error processing {crypto_id}: {crypto_error}")
-                continue
+                return None
+
+        # Run all cryptos in parallel
+        results = await asyncio.gather(
+            *[_process_one(cid) for cid in ids_list],
+            return_exceptions=True
+        )
+        for res in results:
+            if isinstance(res, Exception):
+                print(f"[ERROR] Forecast task raised: {res}")
+            elif res is not None:
+                crypto_id, forecast_result = res
+                forecasts[crypto_id] = forecast_result
         
         # Only return if we have at least one forecast
         if not forecasts:
@@ -723,6 +729,19 @@ async def get_forecasts(
             status_code=500,
             detail="Forecast generation failed.",
         )
+
+
+@router.get("/model-metrics")
+@rate_limit("forecasts")
+async def get_model_metrics(request: Request, response: Response) -> Dict[str, Any]:
+    """Get real training metrics for all ML models across all coins."""
+    if not ML_MODELS_AVAILABLE:
+        return {"models": {}, "ml_available": False}
+    try:
+        return ml_forecast_service.get_all_model_metrics()
+    except Exception as e:
+        print(f"[ERROR] Failed to load model metrics: {e}")
+        return {"models": {}, "ml_available": ML_MODELS_AVAILABLE, "error": str(e)}
 
 
 @router.get("/models")

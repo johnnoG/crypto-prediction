@@ -43,7 +43,7 @@ function ForecastsPage() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Model Type</h3>
-                <p className="text-lg font-black text-gray-900 dark:text-gray-100">Advanced Baseline</p>
+                <p className="text-lg font-black text-gray-900 dark:text-gray-100">Deep Learning</p>
               </div>
             </div>
           </div>

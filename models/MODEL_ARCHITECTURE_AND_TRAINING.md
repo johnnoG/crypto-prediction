@@ -587,6 +587,65 @@ Feature selection narrows this to the top 80 by mutual information regression (c
 
 ---
 
+## Model Serving & Deployment
+
+### Build Manifest
+
+After training, run the manifest builder to make artifacts discoverable by the backend:
+
+```bash
+python3 models/src/build_manifest.py
+```
+
+**What it generates:**
+
+| Path | Contents |
+|------|----------|
+| `models/artifacts/manifest.json` | Per-coin map of available models, artifact timestamps, and `n_features` |
+| `models/artifacts/preprocessing/{COIN}/feature_names.json` | Ordered list of 50 selected features |
+| `models/artifacts/preprocessing/{COIN}/feature_scaler.joblib` | Fitted `RobustScaler` for the feature matrix |
+| `models/artifacts/preprocessing/{COIN}/target_scaler.joblib` | Fitted `RobustScaler` for log-return targets |
+
+**`manifest.json` structure:**
+
+```json
+{
+  "BTC": {
+    "timestamp": "20260218_173812",
+    "artifact_timestamps": {
+      "dlinear": "20260218_173811",
+      "tcn": "20260218_173811",
+      "enhanced_lstm": "20260218_173812",
+      "transformer": "20260218_173812"
+    },
+    "models": ["dlinear", "tcn", "enhanced_lstm", "transformer"],
+    "n_features": 50
+  },
+  ...
+}
+```
+
+Artifact timestamps use a ±2-second fuzzy match because DLinear/TCN save slightly before the training-output directory timestamp.
+
+### Backend Inference Pipeline (`ml_forecast_service.py`)
+
+The inference service:
+
+1. Reads `manifest.json` to discover available models for the requested coin
+2. Loads coin-specific preprocessing from `models/artifacts/preprocessing/{COIN}/`
+3. Reads the last `seq_len` rows from `data/features/{COIN}_features.parquet`
+4. Selects the 50 manifest-specified features + prepends the scaled log-return target as column 0
+5. Scales with the coin's `feature_scaler` → builds a `(1, seq_len, n_features+1)` tensor
+6. Loads the Keras model (`.h5` / `.weights.h5`) or LightGBM model (`.txt`) with coin-specific custom objects
+7. Runs inference → inverse-transforms log-returns via `target_scaler` → applies `current_price × exp(log_return)` to produce price forecasts
+8. Returns 1-day, 7-day, and 30-day price predictions with confidence intervals (MC dropout where available)
+
+**Namespace isolation**: Model classes are imported with `importlib.util.spec_from_file_location` to avoid collision between `backend/app/models/` (SQLAlchemy ORM) and `models/src/models/` (ML model classes).
+
+**CoinGecko fast-fetch**: For ML models, CoinGecko price fetching has a 5-second timeout. If it times out, the current price is sourced from the parquet feature data (last closing price), ensuring inference always completes.
+
+---
+
 ## MLflow Experiment Tracking
 
 All training runs are automatically logged to MLflow (local file store):

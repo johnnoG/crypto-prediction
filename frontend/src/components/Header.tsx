@@ -14,8 +14,14 @@ function Header({ currentPage, onNavigate }: HeaderProps) {
   const [showSignIn, setShowSignIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
 
+  const PROTECTED_PAGES = ['markets', 'forecasts', 'news', 'watchlist'];
+
   // Handle navigation - use onNavigate if provided, otherwise scroll to section
   const handleNavigation = (pageId: string) => {
+    if (PROTECTED_PAGES.includes(pageId) && !isAuthenticated) {
+      setShowSignIn(true);
+      return;
+    }
     if (onNavigate) {
       onNavigate(pageId);
     } else {
@@ -25,11 +31,11 @@ function Header({ currentPage, onNavigate }: HeaderProps) {
       }
     }
   };
-  
+
   const navItems = [
     {
       id: 'home',
-      label: 'Dashboard',
+      label: 'Home',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
@@ -126,6 +132,11 @@ function Header({ currentPage, onNavigate }: HeaderProps) {
                 >
                   {item.icon}
                   <span>{item.label}</span>
+                  {!isAuthenticated && PROTECTED_PAGES.includes(item.id) && (
+                    <svg className="w-3 h-3 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
                 </button>
               ))}
             </div>

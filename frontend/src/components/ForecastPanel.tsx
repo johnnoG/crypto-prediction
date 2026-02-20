@@ -9,6 +9,23 @@ import ConfidenceIndicator from './ConfidenceIndicator';
 import TechnicalSignalIndicator from './TechnicalSignalIndicator';
 import CryptoIcon from './CryptoIcon';
 
+interface ModelMetricsData {
+  models: Record<string, {
+    label: string;
+    description: string;
+    type: string;
+    available_coins: string[];
+    avg_directional_accuracy_1d: number | null;
+    per_coin: Record<string, {
+      val_rmse_1d?: number;
+      directional_accuracy?: Record<string, number>;
+      test_rmse?: number;
+      test_mae?: number;
+    }>;
+  }>;
+  ml_available: boolean;
+}
+
 interface ForecastData {
   forecasts: Record<string, {
     model: string;
@@ -51,69 +68,69 @@ interface ForecastData {
 }
 
 const FORECAST_MODELS = [
-  { 
-    value: 'baseline', 
-    label: 'Technical Analysis', 
-    description: 'RSI, MACD, Bollinger Bands + trend analysis', 
-    accuracy: '87%', 
+  {
+    value: 'lightgbm',
+    label: 'LightGBM',
+    description: 'Gradient boosting with 150+ engineered features',
+    accuracy: '53%',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
       </svg>
     )
   },
-  { 
-    value: 'arima', 
-    label: 'Enhanced ARIMA', 
-    description: 'Auto-parameter selection with confidence intervals', 
-    accuracy: '89%', 
+  {
+    value: 'lstm',
+    label: 'LSTM',
+    description: 'Bidirectional LSTM with attention mechanism',
+    accuracy: '52%',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+    )
+  },
+  {
+    value: 'transformer',
+    label: 'Transformer',
+    description: 'Multi-head self-attention with causal masking',
+    accuracy: '54%',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    )
+  },
+  {
+    value: 'tcn',
+    label: 'TCN',
+    description: 'Temporal Convolutional Network with dilated causal convolutions',
+    accuracy: '53%',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+      </svg>
+    )
+  },
+  {
+    value: 'dlinear',
+    label: 'DLinear',
+    description: 'Trend/seasonal decomposition baseline model',
+    accuracy: '51%',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
       </svg>
     )
   },
-  { 
-    value: 'ets', 
-    label: 'Exponential Smoothing', 
-    description: 'ETS with trend and seasonality detection', 
-    accuracy: '85%', 
+  {
+    value: 'ml_ensemble',
+    label: 'ML Ensemble',
+    description: 'Weighted average of all deep learning models',
+    accuracy: '54%',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    )
-  },
-  { 
-    value: 'sarima', 
-    label: 'Seasonal ARIMA', 
-    description: 'SARIMA with seasonal components', 
-    accuracy: '91%', 
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-    )
-  },
-  { 
-    value: 'ensemble', 
-    label: 'Ensemble Model', 
-    description: 'Combines multiple statistical models', 
-    accuracy: '93%', 
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    )
-  },
-  { 
-    value: 'lightgbm', 
-    label: 'Machine Learning', 
-    description: 'Advanced ML ensemble with technical indicators', 
-    accuracy: '94%', 
-    icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
       </svg>
     )
   },
@@ -164,22 +181,16 @@ const ALL_CRYPTO_OPTIONS = [
   { id: 'fantom', name: 'Fantom', symbol: 'FTM', category: 'L1' },
 ];
 
-// Default selection: Top 6 most popular cryptocurrencies for optimal loading
-// Load time: ~6-8 seconds (vs 14s for all 22)
+// Default: bitcoin only for fast initial load (~16s vs 80s for all 5)
 // Users can add more via "Customize" button
 const DEFAULT_CRYPTOS = [
   'bitcoin',      // BTC
-  'ethereum',     // ETH
-  'ripple',       // XRP
-  'solana',       // SOL
-  'binancecoin',  // BNB
-  'dogecoin'      // DOGE
 ];
 
 function ForecastPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedModel, setSelectedModel] = useState('baseline');
+  const [selectedModel, setSelectedModel] = useState('lstm');
   const [forecastDays, setForecastDays] = useState(7);
   const [selectedCrypto, setSelectedCrypto] = useState<string | null>(null);
   const [selectedCryptos, setSelectedCryptos] = useState<string[]>(DEFAULT_CRYPTOS);
@@ -205,6 +216,13 @@ function ForecastPanel() {
     enabled: selectedCryptos.length > 0,
   });
 
+  // Fetch real training metrics for model accuracy display
+  const { data: modelMetrics } = useQuery<ModelMetricsData>({
+    queryKey: ['model-metrics'],
+    queryFn: () => apiClient.getModelMetrics(),
+    staleTime: 3600000, // 1 hour
+  });
+
   // Helper functions
   const toggleCrypto = (cryptoId: string) => {
     setSelectedCryptos(prev => 
@@ -215,6 +233,10 @@ function ForecastPanel() {
   };
 
   const getModelAccuracy = (model: string) => {
+    const dynamic = modelMetrics?.models?.[model]?.avg_directional_accuracy_1d;
+    if (dynamic != null) {
+      return `${Math.round(dynamic * 100)}% DA`;
+    }
     return FORECAST_MODELS.find(m => m.value === model)?.accuracy || 'N/A';
   };
 
@@ -324,12 +346,49 @@ function ForecastPanel() {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="market-card">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-6"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-48 bg-gray-200 dark:bg-gray-700 rounded-2xl"></div>
+          <div className="flex flex-col items-center justify-center py-20 space-y-6">
+            {/* Animated brain/AI icon */}
+            <div className="relative">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl">
+                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              {/* Pulsing ring */}
+              <div className="absolute inset-0 rounded-2xl border-4 border-blue-400 opacity-50 animate-ping"></div>
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100">
+                Running ML Inference...
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 max-w-sm">
+                The {selectedModel.toUpperCase()} model is analyzing {selectedCryptos.length > 1 ? `${selectedCryptos.length} assets` : selectedCryptos[0] || 'market data'} in parallel. This typically takes 10–20 seconds.
+              </p>
+            </div>
+
+            {/* Progress dots */}
+            <div className="flex items-center space-x-2">
+              {['Fetching prices', 'Running model', 'Building forecast'].map((step, i) => (
+                <div key={step} className="flex items-center">
+                  <div className="flex items-center space-x-1.5">
+                    <div
+                      className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    ></div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{step}</span>
+                  </div>
+                  {i < 2 && <div className="w-4 h-px bg-gray-300 dark:bg-gray-600 mx-2"></div>}
+                </div>
               ))}
+            </div>
+
+            {/* Model badge */}
+            <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-200 dark:border-blue-700">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                {FORECAST_MODELS.find(m => m.value === selectedModel)?.label || selectedModel} · {forecastDays}-day forecast
+              </span>
             </div>
           </div>
         </div>
@@ -369,52 +428,7 @@ function ForecastPanel() {
     );
   }
 
-  if (!forecastData) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="market-card">
-          <div className="text-center py-12">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No forecast data available</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Please select cryptocurrencies and try again</p>
-            <button 
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm transition-colors"
-              onClick={() => refetch()}
-            >
-              Load Forecasts
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (forecastData && (!forecastData.forecasts || Object.keys(forecastData.forecasts).length === 0)) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="market-card">
-          <div className="text-center py-12">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No forecast data available</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Please try again in a moment or reduce the selection.</p>
-            <button
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm transition-colors"
-              onClick={() => refetch()}
-            >
-              Load Forecasts
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const hasForecasts = forecastData?.forecasts && Object.keys(forecastData.forecasts).length > 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -554,7 +568,10 @@ function ForecastPanel() {
                       <span className="font-bold text-gray-900 dark:text-gray-100 text-lg">{model.label}</span>
                     </div>
                     <div className="bg-gradient-to-r from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30 text-green-800 dark:text-green-300 px-3 py-1 rounded-full text-sm font-bold border border-green-200 dark:border-green-700">
-                      {model.accuracy}
+                      {(() => {
+                        const da = modelMetrics?.models?.[model.value]?.avg_directional_accuracy_1d;
+                        return da != null ? `${Math.round(da * 100)}% DA` : model.accuracy;
+                      })()}
                     </div>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{model.description}</p>
@@ -577,10 +594,9 @@ function ForecastPanel() {
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { value: 3, label: '3 Days', subtitle: 'Short-term' },
-                    { value: 7, label: '1 Week', subtitle: 'Medium-term' },
-                    { value: 14, label: '2 Weeks', subtitle: 'Long-term' },
-                    { value: 30, label: '1 Month', subtitle: 'Extended' }
+                    { value: 1, label: '1 Day', subtitle: 'Short-term' },
+                    { value: 7, label: '7 Days', subtitle: 'Medium-term' },
+                    { value: 30, label: '30 Days', subtitle: 'Long-term' }
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -638,8 +654,29 @@ function ForecastPanel() {
         </div>
       </div>
 
+      {/* No data message */}
+      {!isLoading && !hasForecasts && (
+        <div className="market-card">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No forecast data available</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">Prices may be temporarily unavailable. Try again in a moment.</p>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold text-sm transition-colors"
+              onClick={() => refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* AI Market Intelligence Dashboard */}
-      {forecastData && (
+      {hasForecasts && forecastData && (
         <div className="market-card">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -701,17 +738,17 @@ function ForecastPanel() {
             
             <div className="text-center p-6 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-2xl border-2 border-orange-200 dark:border-orange-700 shadow-sm hover:shadow-md transition-shadow">
               <div className="text-3xl font-black text-orange-600 dark:text-orange-400 mb-2">
-                {FORECAST_MODELS.find(m => m.value === selectedModel)?.accuracy || '85%'}
+                {getModelAccuracy(selectedModel)}
               </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">Model Accuracy</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Historical performance</div>
+              <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">Directional Accuracy</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg across all coins</div>
             </div>
           </div>
         </div>
       )}
 
       {/* Enhanced Crypto Forecast Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {hasForecasts && forecastData && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {Object.entries(forecastData.forecasts).map(([cryptoId, forecast]) => {
           const isSelected = selectedCrypto === cryptoId;
           const latestForecast = forecast.forecasts[forecast.forecasts.length - 1];
@@ -832,15 +869,15 @@ function ForecastPanel() {
                   <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div className="text-xs text-gray-500 dark:text-gray-400 font-semibold">R² Score</div>
                     <div className={`text-sm font-black ${
-                      forecast.model_metrics.r_squared > 0.9 ? 'text-green-600 dark:text-green-400' :
-                      forecast.model_metrics.r_squared > 0.8 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'
+                      (forecast.model_metrics.r_squared ?? 0) > 0.9 ? 'text-green-600 dark:text-green-400' :
+                      (forecast.model_metrics.r_squared ?? 0) > 0.8 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'
                     }`}>
-                      {forecast.model_metrics.r_squared.toFixed(2)}
+                      {(forecast.model_metrics.r_squared ?? 0).toFixed(2)}
                     </div>
                   </div>
                   <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div className="text-xs text-gray-500 dark:text-gray-400 font-semibold">MAPE</div>
-                    <div className="text-sm font-black text-green-600 dark:text-green-400">{forecast.model_metrics.mape.toFixed(1)}%</div>
+                    <div className="text-sm font-black text-green-600 dark:text-green-400">{(forecast.model_metrics.mape ?? 0).toFixed(1)}%</div>
                   </div>
                 </div>
 
@@ -863,10 +900,10 @@ function ForecastPanel() {
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Detailed View */}
-      {selectedCrypto && forecastData.forecasts[selectedCrypto] && (
+      {hasForecasts && forecastData && selectedCrypto && forecastData.forecasts[selectedCrypto] && (
         <div className="market-card">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
@@ -1031,7 +1068,7 @@ function ForecastPanel() {
                   MAPE
                 </div>
                 <div className="text-3xl font-black text-blue-700 dark:text-blue-300 mb-1">
-                  {forecastData.forecasts[selectedCrypto].model_metrics.mape.toFixed(1)}%
+                  {(forecastData.forecasts[selectedCrypto].model_metrics.mape ?? 0).toFixed(1)}%
                 </div>
                 <div className="text-xs text-blue-500 dark:text-blue-400">Model accuracy</div>
               </div>
@@ -1040,7 +1077,7 @@ function ForecastPanel() {
                   RMSE
                 </div>
                 <div className="text-3xl font-black text-green-700 dark:text-green-300 mb-1">
-                  {forecastData.forecasts[selectedCrypto].model_metrics.rmse.toFixed(3)}
+                  {(forecastData.forecasts[selectedCrypto].model_metrics.rmse ?? 0).toFixed(3)}
                 </div>
                 <div className="text-xs text-green-500 dark:text-green-400">Prediction error</div>
               </div>
@@ -1049,7 +1086,7 @@ function ForecastPanel() {
                   R²
                 </div>
                 <div className="text-3xl font-black text-purple-700 dark:text-purple-300 mb-1">
-                  {forecastData.forecasts[selectedCrypto].model_metrics.r_squared.toFixed(3)}
+                  {(forecastData.forecasts[selectedCrypto].model_metrics.r_squared ?? 0).toFixed(3)}
                 </div>
                 <div className="text-xs text-purple-500 dark:text-purple-400">Model fit quality</div>
               </div>

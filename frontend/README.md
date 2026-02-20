@@ -5,8 +5,9 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 ## What’s Implemented
 
 - Single‑page dashboard with in-app page switching (no react-router).
+- **Public landing page** — hero section ("The Future of Crypto Intelligence") is visible without signing in. All other nav pages (Markets, Forecasts, News, Watchlist) are auth-gated: clicking them while signed out opens the sign-in modal instead of navigating.
 - Real‑time crypto grid with streaming + polling fallback.
-- Forecasting UI (model selection + forecast panels).
+- Forecasting UI with real trained ML models (LightGBM, LSTM, Transformer, TCN, DLinear) replacing the previous ARIMA/ETS/SARIMA placeholders.
 - News feed with sentiment highlights and pagination.
 - Market data views, technical indicators, and charts.
 - User auth (JWT) + OAuth callback handling.
@@ -34,14 +35,24 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 
 ## Pages & Key Components
 
-- Home: `HomePage` + `RealTimeCryptoGrid` + `NewsPanel`
-- Markets: `MarketsPage` + charting widgets
-- Forecasts: `ForecastsPage` + `ForecastPanel`
-- News: `NewsPage` + `NewsPanel`
-- Watchlist: `WatchlistPage`
+- Home (`HomePage`): **public** — hero section only when signed out; full content (markets grid, forecasts, news, features) when signed in
+- Markets (`MarketsPage`): **requires sign-in** — charting widgets
+- Forecasts (`ForecastsPage` + `ForecastPanel`): **requires sign-in** — live ML model selection and forecast display
+- News (`NewsPage` + `NewsPanel`): **requires sign-in**
+- Watchlist (`WatchlistPage`): **requires sign-in**
 - Alerts: `AlertsPage`
 - Settings: `SettingsPage`
 - Portfolio (placeholder UI): `PortfolioPage`
+
+### Auth-gated Navigation (`Header.tsx`)
+
+`PROTECTED_PAGES = ['markets', 'forecasts', 'news', 'watchlist']`
+
+When an unauthenticated user clicks a protected nav item:
+- The sign-in modal opens immediately
+- Navigation does not occur
+- A lock icon (🔒) is shown next to each protected nav item label
+- Lock icons disappear after signing in
 
 ## Backend Integration
 
@@ -125,6 +136,7 @@ npm run preview
 
 ## Notes
 
-- The UI currently forces dark mode in `frontend/src/App.tsx`.
+- The UI forces dark mode in `frontend/src/App.tsx`.
 - Auth tokens are stored in `localStorage` (`auth_tokens`, `auth_user`).
 - Errors on protected endpoints trigger a client-side logout event.
+- `ForecastPanel` fetches `/api/forecasts/models` on mount to determine which ML models are available from the backend. Model options shown in the UI (LightGBM, LSTM, Transformer, TCN, DLinear, Ensemble) reflect actual trained artifacts rather than static placeholders.

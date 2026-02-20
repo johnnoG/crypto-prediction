@@ -24,6 +24,8 @@ Crypto Forecast & Real‑Time Dashboard backend built with FastAPI. This documen
 - Prometheus metrics
 - Sentry (error tracking)
 - APScheduler (ETL scheduling)
+- TensorFlow ≥ 2.15 + LightGBM ≥ 4.1 + scikit-learn ≥ 1.3 (ML inference)
+- PyArrow ≥ 14 (parquet feature data reading)
 
 ## External Tools / Data Sources
 
@@ -45,7 +47,8 @@ Service modules live in `backend/app/services`:
 
 - `prices_service`: prices + market data with cache integration
 - `smart_cache_service`: scheduled cache refresh + cached JSON snapshots
-- `forecast_service` / `ml_forecast_service`: forecasting models + backtesting
+- `forecast_service`: baseline/ARIMA forecasting with backtesting metadata
+- `ml_forecast_service`: **full ML inference pipeline** — loads all 5 trained model types (DLinear, TCN, LSTM, Transformer, LightGBM) via `models/artifacts/manifest.json`, applies coin-specific RobustScaler preprocessing, runs inference from parquet feature data, and converts log-return predictions back to prices. Uses `importlib.util.spec_from_file_location` to avoid the `backend/app/models/` namespace collision.
 - `news_service` / `realtime_news_service`: crawl + real-time aggregation
 - `crypto_data_service`: dashboard aggregator for prices/news/sentiment
 - `feature_engineering` + `data_aggregator`: OHLCV + technical features
@@ -55,6 +58,22 @@ Service modules live in `backend/app/services`:
 - `prometheus_metrics`: metrics export
 - `oauth_service`: OAuth flows
 - `sentry_config`: error tracking
+
+### ML Serving Prerequisites
+
+Before ML forecasts are available, run:
+
+```bash
+python3 models/src/build_manifest.py
+```
+
+This generates:
+- `models/artifacts/manifest.json` — maps each coin to its available models and artifact timestamps
+- `models/artifacts/preprocessing/{COIN}/feature_names.json` — selected feature list
+- `models/artifacts/preprocessing/{COIN}/feature_scaler.joblib` — fitted RobustScaler for features
+- `models/artifacts/preprocessing/{COIN}/target_scaler.joblib` — fitted RobustScaler for log-return target
+
+The manifest is re-read on each request, so rerunning `build_manifest.py` after retraining automatically activates new artifacts.
 
 ## API Endpoints
 
@@ -217,8 +236,28 @@ docker build -t crypto-backend .
 docker run -p 8000:8000 crypto-backend
 ```
 
+## Docker Compose (backend service)
+
+The backend container mounts the models directory and sets ML-specific limits:
+
+```yaml
+volumes:
+  - ./backend:/app
+  - ./data:/data
+  - ./models:/models      # Required for ML inference
+deploy:
+  resources:
+    limits:
+      memory: 4g          # TF model loading requires headroom
+environment:
+  - TF_CPP_MIN_LOG_LEVEL=2
+  - TF_FORCE_CPU_ALLOW_GROWTH=true
+```
+
 ## Notes
 
 - Prices/market endpoints currently read from JSON cache files in `backend/app/data/cache`.
 - Redis is optional; if `REDIS_URL` is not set or unavailable, in-memory cache is used.
-- Forecast ML models are optional and only available if dependencies and model artifacts are present.
+- Forecast ML models are optional and only available if `models/artifacts/manifest.json` exists and ML dependencies are installed. If unavailable, the forecast endpoint falls back to ARIMA/statistical models.
+- For ML models, the forecast API uses a 5-second CoinGecko fast-fetch timeout and falls back to prices embedded in the parquet feature data if CoinGecko is slow or rate-limited.
+- Available ML model types for `GET /api/forecasts?model=<type>`: `lightgbm`, `lstm`, `transformer`, `tcn`, `dlinear`, `ml_ensemble`.

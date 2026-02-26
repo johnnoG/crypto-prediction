@@ -1,0 +1,102 @@
+{
+  "version": "production",
+  "timestamp": "20260221_081137",
+  "config": {
+    "transformer_weight": 0.4,
+    "lstm_weight": 0.35,
+    "lightgbm_weight": 0.25,
+    "use_meta_learner": true,
+    "meta_model_type": "elastic_net",
+    "meta_alpha": 0.1,
+    "meta_l1_ratio": 0.5,
+    "use_regime_weighting": true,
+    "regime_lookback": 20,
+    "regime_weight_sensitivity": 0.3,
+    "use_online_learning": true,
+    "online_learning_rate": 0.01,
+    "adaptation_window": 50,
+    "min_confidence_threshold": 0.3,
+    "uncertainty_method": "ensemble_variance",
+    "mc_samples": 50,
+    "horizons": [
+      1,
+      7,
+      30
+    ],
+    "horizon_weights": [
+      1.0,
+      0.8,
+      0.6
+    ],
+    "sequence_length": 60
+  },
+  "model_weights": {
+    "dlinear": 0.20026526993533575,
+    "tcn": 0.1978694403917116,
+    "transformer": 0.20189443138951607,
+    "enhanced_lstm": 0.20025583680848363,
+    "lightgbm": 0.19971502147495296
+  },
+  "meta_model_names": [
+    "transformer",
+    "enhanced_lstm",
+    "dlinear",
+    "tcn",
+    "lightgbm"
+  ],
+  "saved_models": [
+    [
+      "transformer",
+      "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/transformer/transformer_vproduction_20260221_081137.h5"
+    ],
+    [
+      "enhanced_lstm",
+      "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/enhanced_lstm/enhanced_lstm_vproduction_20260221_081137.h5"
+    ],
+    [
+      "lightgbm",
+      "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/advanced_ensemble/advanced_ensemble_vproduction_20260221_081137/lightgbm_model.pkl"
+    ]
+  ],
+  "performance_history": {},
+  "metadata": {
+    "trained_at": "2026-02-21T08:11:16.245233",
+    "config": {
+      "transformer_weight": 0.4,
+      "lstm_weight": 0.35,
+      "lightgbm_weight": 0.25,
+      "use_meta_learner": true,
+      "meta_model_type": "elastic_net",
+      "meta_alpha": 0.1,
+      "meta_l1_ratio": 0.5,
+      "use_regime_weighting": true,
+      "regime_lookback": 20,
+      "regime_weight_sensitivity": 0.3,
+      "use_online_learning": true,
+      "online_learning_rate": 0.01,
+      "adaptation_window": 50,
+      "min_confidence_threshold": 0.3,
+      "uncertainty_method": "ensemble_variance",
+      "mc_samples": 50,
+      "horizons": [
+        1,
+        7,
+        30
+      ],
+      "horizon_weights": [
+        1.0,
+        0.8,
+        0.6
+      ],
+      "sequence_length": 60
+    },
+    "trained_models": [
+      "dlinear",
+      "tcn",
+      "transformer",
+      "enhanced_lstm",
+      "lightgbm"
+    ],
+    "reused_pretrained": true
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "trained_at": "2026-02-21T11:28:04.119655",
+  "n_samples_train": 4791,
+  "n_samples_val": 272,
+  "input_shape": [
+    60,
+    51
+  ],
+  "config": {
+    "sequence_length": 60,
+    "n_features": 51,
+    "n_filters": 16,
+    "kernel_size": 5,
+    "n_blocks": 4,
+    "dropout_rate": 0.35082184443307074,
+    "learning_rate": 0.0027570853763212045,
+    "batch_size": 64,
+    "epochs": 150,
+    "early_stopping_patience": 10,
+    "multi_step": [
+      1,
+      7,
+      30
+    ]
+  },
+  "metrics": {
+    "train_rmse_1d": 1.0869519268976386,
+    "train_rmse_7d": 1.0877250218853751,
+    "train_rmse_30d": 1.082531779608035,
+    "epochs_trained": 24,
+    "val_rmse_1d": 0.8419268540129985,
+    "val_rmse_7d": 0.8489520878396906,
+    "val_rmse_30d": 0.907447810377196
+  },
+  "version": "production",
+  "model_path": "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/tcn/tcn_vproduction_20260221_115328.h5",
+  "framework": "tensorflow",
+  "model_type": "tcn"
+}

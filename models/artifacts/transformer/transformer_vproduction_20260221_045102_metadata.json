@@ -1,0 +1,43 @@
+{
+  "trained_at": "2026-02-21T04:49:46.580387",
+  "n_samples_train": 11019,
+  "n_samples_val": 717,
+  "input_shape": [
+    60,
+    51
+  ],
+  "config": {
+    "sequence_length": 60,
+    "n_features": 51,
+    "d_model": 128,
+    "num_heads": 4,
+    "ff_dim": 1024,
+    "num_layers": 3,
+    "dropout_rate": 0.31242177333881366,
+    "learning_rate": 1.0994335574766187e-05,
+    "weight_decay": 0.01,
+    "batch_size": 32,
+    "epochs": 150,
+    "early_stopping_patience": 10,
+    "warmup_steps": 370,
+    "multi_step": [
+      1,
+      7,
+      30
+    ],
+    "use_causal_mask": true
+  },
+  "metrics": {
+    "train_rmse_1d": 1.7556581664812818,
+    "train_rmse_7d": 1.7580570757019534,
+    "train_rmse_30d": 1.7123719370118708,
+    "epochs_trained": 30,
+    "val_rmse_1d": 0.9060800751429098,
+    "val_rmse_7d": 0.9218385319262972,
+    "val_rmse_30d": 0.89572337068837
+  },
+  "version": "production",
+  "model_path": "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/transformer/transformer_vproduction_20260221_045102.h5",
+  "framework": "tensorflow",
+  "model_type": "transformer"
+}

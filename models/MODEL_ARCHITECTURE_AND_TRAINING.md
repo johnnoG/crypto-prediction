@@ -407,6 +407,13 @@ Raw Parquet (5600+ rows, 150+ features per crypto)
 | Cross-asset features | None | ETH indicators for BTC training | Macro crypto market context |
 | Model count | 3 | 5 (+ DLinear, TCN) | More diversity for ensemble |
 
+### Code Improvements Applied Feb 26, 2026 (effective on next retrain)
+
+| Change | Root Cause | Fix | Expected Impact |
+|--------|-----------|-----|----------------|
+| Transformer MCDropout in attention layers | `TransformerBlock.dropout1/dropout2` were `layers.Dropout` — bypassed at inference → all 50 MC passes identical → CI ≈ 0 | Changed to `MCDropout` (always-on) in both attention-output and FFN-output positions | Meaningful variance across MC passes → non-zero CI for Transformer |
+| Ensemble regime features in meta-training | Meta-learner trained without regime features; `predict()` could add them at inference — creating a feature-count mismatch | `_rolling_regime_features()` builds per-timestep regime cols during meta-training; `meta_has_regime_features` flag ensures consistency | Meta-learner can now learn regime-conditioned blending |
+
 ### Why Chronological Splits (Not Random)?
 
 Cryptocurrency prices are non-stationary time series. A random train/test split would leak future information into training. We use strict chronological ordering:
@@ -606,24 +613,24 @@ python3 models/src/build_manifest.py
 | `models/artifacts/preprocessing/{COIN}/feature_scaler.joblib` | Fitted `RobustScaler` for the feature matrix |
 | `models/artifacts/preprocessing/{COIN}/target_scaler.joblib` | Fitted `RobustScaler` for log-return targets |
 
-**`manifest.json` structure:**
+**`manifest.json` structure (10 coins as of Feb 22, 2026):**
 
 ```json
 {
-  "BTC": {
-    "timestamp": "20260218_173812",
-    "artifact_timestamps": {
-      "dlinear": "20260218_173811",
-      "tcn": "20260218_173811",
-      "enhanced_lstm": "20260218_173812",
-      "transformer": "20260218_173812"
-    },
-    "models": ["dlinear", "tcn", "enhanced_lstm", "transformer"],
-    "n_features": 50
-  },
-  ...
+  "BTC":  { "timestamp": "20260221_045102", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "ETH":  { "timestamp": "20260221_081137", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "LTC":  { "timestamp": "20260221_115328", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "XRP":  { "timestamp": "20260221_160645", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "DOGE": { "timestamp": "20260221_193325", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "BNB":  { "timestamp": "20260222_003855", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "SOL":  { "timestamp": "20260222_035116", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "ADA":  { "timestamp": "20260222_072510", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "LINK": { "timestamp": "20260222_110101", "models": ["dlinear","tcn","enhanced_lstm","transformer"],              "n_features": 50 },
+  "DOT":  { "timestamp": "20260222_143452", "models": ["dlinear","tcn","enhanced_lstm","transformer","lightgbm"],   "n_features": 50 }
 }
 ```
+
+Note: DOT is the only new coin with a LightGBM artifact (shared `lightgbm/` directory — last coin trained overwrites it). LightGBM is also available for BTC from the original training run.
 
 Artifact timestamps use a ±2-second fuzzy match because DLinear/TCN save slightly before the training-output directory timestamp.
 
@@ -661,15 +668,23 @@ mlflow ui --backend-store-uri file://models/src/mlruns_production --port 5000
 
 ---
 
-## Training Results (February 2026 — Run 2, post-fixes)
+## Training Results (February 2026)
 
-Production training run across 5 cryptocurrencies (BTC, ETH, LTC, XRP, DOGE) with Optuna hyperparameter tuning (20 trials per model), walk-forward validation, MC dropout uncertainty quantification, and advanced MLflow logging. Run on Apple Silicon (Metal GPU). Total wall-clock time: ~18 hours.
+Production training across 10 cryptocurrencies with Optuna hyperparameter tuning (20 trials per model), walk-forward validation, MC dropout uncertainty quantification, and advanced MLflow logging. Run on Apple Silicon M3 Max (Metal GPU).
 
-### Pipeline fixes applied before this run
+- **Original 5 (BTC, ETH, LTC, XRP, DOGE)** — trained Feb 21, 2026. ~18 hours total.
+- **New 5 (BNB, SOL, ADA, LINK, DOT)** — trained Feb 22, 2026. ~12 hours total.
+
+### Pipeline fixes applied before the Feb 21 run
 
 1. **Directional accuracy**: Fixed `np.sign(np.diff(y))` to `np.sign(y)` for log-return targets (was measuring change-of-change instead of direction, making LightGBM show 5-16% DA)
 2. **Ensemble weighting**: Performance-based inverse-squared-RMSE weights replace static regime weights; models > 2x worse than best are excluded; regime weight interpolation disabled when validation weights are active
 3. **Transformer MC Dropout**: Added `MCDropout` class (always-on dropout) for output heads to enable Monte Carlo uncertainty on TF-Metal
+
+### Code improvements applied Feb 26, 2026 (effective on next retrain)
+
+4. **MCDropout in TransformerBlock attention layers**: `TransformerBlock.dropout1` and `dropout2` changed from `layers.Dropout` to `MCDropout`. Root cause: the transformer body was deterministic at inference — all 50 MC passes produced identical hidden representations → CI ≈ 0. With MCDropout in the attention-output and FFN-output positions, each pass gets a different dropout mask → meaningful variance.
+5. **Ensemble regime features in meta-training**: `_rolling_regime_features()` builds a per-timestep `(n_val, 3)` matrix of rolling regime stats (trend_slope, volatility, mean_reverting score) appended to base-model OOF predictions during `_train_meta_learner()`. The `meta_has_regime_features` flag ensures `predict()` uses the same feature count. Previously regime features could only be added at inference, never at training — a feature-count mismatch that silently prevented regime-conditioned blending.
 
 ### Validation RMSE by Model (1d horizon, log-return space)
 
@@ -727,6 +742,65 @@ For ETH, LTC, XRP, DOGE: all 5 models have similar RMSE, so weights are near-uni
 | LightGBM | **53.3%** | 47.4% | 50.4% | 50.0% | 53.7% |
 
 Directional accuracy ranges from 47-57% across all models and coins. This is now correctly computed as `sign(log_return)` (positive = price up). LightGBM and TCN tend to have the highest DA for BTC; Transformer leads for DOGE (57.0%). The modest above-random performance is consistent with the efficient market hypothesis for liquid crypto assets.
+
+---
+
+## Training Results — New 5 Coins (Feb 22, 2026)
+
+### Best Individual Model by Coin
+
+| Coin | Best Model | Val RMSE (1d) | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d) |
+|------|-----------|---------------|-----------|---------------|-----------------|-------------|
+| BNB | LSTM | 0.784 | 0.713 | 0.724 | -1.6% | 50.4% (LSTM) |
+| SOL | LightGBM | 0.625 | 0.625 | 0.630 | -0.8% | 51.1% (Transformer) |
+| ADA | LSTM | 0.834 | 0.885 | 0.891 | -0.7% | 50.7% (TCN) |
+| LINK | TCN | 0.676 | 0.763 | 0.757 | **+0.8%** | 52.6% (LSTM) |
+| DOT | TCN | 1.191 | 1.059 | 1.064 | -0.5% | 50.9% (DLinear) |
+
+LINK is the first coin where the ensemble beats the best individual model (+0.8% on test set). SOL is the easiest coin to model (best RMSE = 0.625); DOT is hardest (RMSE = 1.059). All new coins train faster than the originals — epochs to convergence range 13-47 vs 14-87 for the original 5.
+
+### All Models Validation RMSE (1d horizon)
+
+| Model | BNB | SOL | ADA | LINK | DOT |
+|-------|-----|-----|-----|------|-----|
+| DLinear | 0.859 | 0.781 | 0.862 | 0.692 | 1.220 |
+| TCN | 0.793 | 0.714 | 0.840 | **0.676** | **1.191** |
+| LSTM | **0.784** | 0.721 | **0.834** | 0.678 | 1.194 |
+| Transformer | 0.789 | 0.728 | 0.844 | 0.687 | 1.224 |
+
+### Ensemble Weights
+
+For all 5 new coins the ensemble falls back to the performance-based weighted average (meta-learner can't beat best individual on cross-validated validation splits). Weights are near-uniform (~20% each) because the models have very similar RMSE.
+
+| Model | BNB | SOL | ADA | LINK | DOT |
+|-------|-----|-----|-----|------|-----|
+| DLinear | 18.3% | 19.2% | 19.9% | 18.9% | 19.2% |
+| TCN | 19.8% | 20.3% | 20.0% | 20.1% | 20.2% |
+| Transformer | 20.5% | 19.6% | 20.0% | 20.2% | 19.5% |
+| LSTM | 20.7% | 20.3% | 20.1% | 20.4% | 20.5% |
+| LightGBM | 20.7% | 20.6% | 20.0% | 20.3% | 20.7% |
+
+### Epochs Trained (early stopping)
+
+| Model | BNB | SOL | ADA | LINK | DOT |
+|-------|-----|-----|-----|------|-----|
+| DLinear | 23 | 21 | 37 | 20 | 16 |
+| TCN | 19 | 14 | 22 | 30 | 13 |
+| LSTM | 47 | 34 | 29 | 39 | 25 |
+| Transformer | 31 | 14 | 15 | 31 | 18 |
+
+### Uncertainty Quantification (MC Dropout, 50 samples — mean CI width)
+
+| Model | BNB | SOL | ADA | LINK | DOT |
+|-------|-----|-----|-----|------|-----|
+| DLinear | 2.77 | 3.37 | 1.64 | 2.48 | 1.04 |
+| TCN | 2.32 | 0.606 | 0.869 | 0.330 | 1.23 |
+| LSTM | 0.052 | 0.085 | 0.315 | 0.009 | 0.102 |
+| Transformer | ~0 | 0.047 | ~0 | ~0 | 0.210 |
+
+Transformer CI ≈ 0 for all new coins — consistent with the known root cause (output-head-only MCDropout; fix applied Feb 26). TCN remains the most useful uncertainty estimator. DOT's TCN CI (1.23) is notably high, consistent with its high RMSE.
+
+---
 
 ### Training Configuration
 
@@ -793,7 +867,7 @@ Times include Optuna hyperparameter tuning (20 trials per model, subprocess-isol
 | LSTM | 0.06 | 0.18 | 0.06 | 0.06 | 0.005 |
 | Transformer | 0.0 | 0.0 | ~0.0 | 0.0 | 0.001 |
 
-TCN provides the most useful uncertainty estimates (meaningful CI widths that correlate with prediction difficulty). LSTM CIs are narrow but non-zero. Transformer MCDropout activates on DOGE (0.001 CI) but remains near-zero for other coins — the output-head-only MCDropout has minimal effect when the transformer body produces deterministic representations. DLinear CIs are wide and noisy due to the model's high base variance.
+TCN provides the most useful uncertainty estimates (meaningful CI widths that correlate with prediction difficulty). LSTM CIs are narrow but non-zero. Transformer MCDropout is near-zero across all coins — the output-head-only MCDropout (applied to Feb 21 artifacts) has minimal effect because the transformer body produces deterministic representations at inference. This is fixed in the Feb 26 code update: `TransformerBlock.dropout1/dropout2` are now `MCDropout`, so both attention-output and FFN-output layers apply stochastic masking during MC inference. New CI values will be available after retrain. DLinear CIs are wide and noisy due to the model's high base variance.
 
 ---
 

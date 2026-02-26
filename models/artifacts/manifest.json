@@ -1,11 +1,43 @@
 {
-  "BTC": {
-    "timestamp": "20260218_173812",
+  "ADA": {
+    "timestamp": "20260222_072510",
     "artifact_timestamps": {
-      "dlinear": "20260218_173811",
-      "tcn": "20260218_173811",
-      "enhanced_lstm": "20260218_173812",
-      "transformer": "20260218_173812"
+      "dlinear": "20260222_072510",
+      "tcn": "20260222_072510",
+      "enhanced_lstm": "20260222_072510",
+      "transformer": "20260222_072510"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "BNB": {
+    "timestamp": "20260222_003855",
+    "artifact_timestamps": {
+      "dlinear": "20260222_003855",
+      "tcn": "20260222_003855",
+      "enhanced_lstm": "20260222_003855",
+      "transformer": "20260222_003855"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "BTC": {
+    "timestamp": "20260221_045102",
+    "artifact_timestamps": {
+      "dlinear": "20260221_045102",
+      "tcn": "20260221_045102",
+      "enhanced_lstm": "20260221_045102",
+      "transformer": "20260221_045102"
     },
     "models": [
       "dlinear",
@@ -16,12 +48,28 @@
     "n_features": 50
   },
   "DOGE": {
-    "timestamp": "20260219_111514",
+    "timestamp": "20260221_193325",
     "artifact_timestamps": {
-      "dlinear": "20260219_111514",
-      "tcn": "20260219_111514",
-      "enhanced_lstm": "20260219_111514",
-      "transformer": "20260219_111514"
+      "dlinear": "20260221_193325",
+      "tcn": "20260221_193325",
+      "enhanced_lstm": "20260221_193325",
+      "transformer": "20260221_193325"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "DOT": {
+    "timestamp": "20260222_143452",
+    "artifact_timestamps": {
+      "dlinear": "20260222_143452",
+      "tcn": "20260222_143452",
+      "enhanced_lstm": "20260222_143452",
+      "transformer": "20260222_143452"
     },
     "models": [
       "dlinear",
@@ -33,12 +81,28 @@
     "n_features": 50
   },
   "ETH": {
-    "timestamp": "20260218_212927",
+    "timestamp": "20260221_081137",
     "artifact_timestamps": {
-      "dlinear": "20260218_212926",
-      "tcn": "20260218_212927",
-      "enhanced_lstm": "20260218_212927",
-      "transformer": "20260218_212927"
+      "dlinear": "20260221_081137",
+      "tcn": "20260221_081137",
+      "enhanced_lstm": "20260221_081137",
+      "transformer": "20260221_081137"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "LINK": {
+    "timestamp": "20260222_110101",
+    "artifact_timestamps": {
+      "dlinear": "20260222_110101",
+      "tcn": "20260222_110101",
+      "enhanced_lstm": "20260222_110101",
+      "transformer": "20260222_110101"
     },
     "models": [
       "dlinear",
@@ -49,12 +113,28 @@
     "n_features": 50
   },
   "LTC": {
-    "timestamp": "20260219_014224",
+    "timestamp": "20260221_115328",
     "artifact_timestamps": {
-      "dlinear": "20260219_014223",
-      "tcn": "20260219_014223",
-      "enhanced_lstm": "20260219_014224",
-      "transformer": "20260219_014224"
+      "dlinear": "20260221_115328",
+      "tcn": "20260221_115328",
+      "enhanced_lstm": "20260221_115328",
+      "transformer": "20260221_115328"
+    },
+    "models": [
+      "dlinear",
+      "tcn",
+      "enhanced_lstm",
+      "transformer"
+    ],
+    "n_features": 50
+  },
+  "SOL": {
+    "timestamp": "20260222_035116",
+    "artifact_timestamps": {
+      "dlinear": "20260222_035116",
+      "tcn": "20260222_035116",
+      "enhanced_lstm": "20260222_035116",
+      "transformer": "20260222_035116"
     },
     "models": [
       "dlinear",
@@ -65,12 +145,12 @@
     "n_features": 50
   },
   "XRP": {
-    "timestamp": "20260219_063854",
+    "timestamp": "20260221_160645",
     "artifact_timestamps": {
-      "dlinear": "20260219_063853",
-      "tcn": "20260219_063854",
-      "enhanced_lstm": "20260219_063854",
-      "transformer": "20260219_063854"
+      "dlinear": "20260221_160645",
+      "tcn": "20260221_160645",
+      "enhanced_lstm": "20260221_160645",
+      "transformer": "20260221_160645"
     },
     "models": [
       "dlinear",

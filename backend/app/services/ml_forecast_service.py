@@ -150,6 +150,11 @@ COINGECKO_TO_TICKER = {
     "litecoin": "LTC",
     "ripple": "XRP",
     "dogecoin": "DOGE",
+    "binancecoin": "BNB",
+    "solana": "SOL",
+    "cardano": "ADA",
+    "chainlink": "LINK",
+    "polkadot": "DOT",
 }
 
 # Keras model type → artifact subdirectory

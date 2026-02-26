@@ -1,0 +1,210 @@
+{
+  "crypto": "BNB",
+  "timestamp": "2026-02-22T00:38:57.662241",
+  "pipeline_flags": {
+    "tune": true,
+    "walk_forward": true,
+    "uncertainty": true,
+    "advanced_mlflow": true
+  },
+  "config": {
+    "sequence_length": 60,
+    "epochs": 150,
+    "batch_size": 32,
+    "max_features": 50,
+    "train_ratio": 0.7,
+    "val_ratio": 0.15
+  },
+  "models": {
+    "dlinear": {
+      "train_time_seconds": 14.771202802658081,
+      "metrics": {
+        "train_rmse_1d": 1.2357703945799055,
+        "train_rmse_7d": 1.2477057733682466,
+        "train_rmse_30d": 1.2404093692624847,
+        "epochs_trained": 23,
+        "val_rmse_1d": 0.8589524563343157,
+        "val_rmse_7d": 0.8464262194144156,
+        "val_rmse_30d": 0.8414035625387548
+      },
+      "directional_accuracy": {
+        "1d": 0.4852941176470588,
+        "7d": 0.46691176470588236,
+        "30d": 0.48161764705882354
+      }
+    },
+    "tcn": {
+      "train_time_seconds": 91.03538703918457,
+      "metrics": {
+        "train_rmse_1d": 1.2634784185989645,
+        "train_rmse_7d": 1.2708683712406628,
+        "train_rmse_30d": 1.2925005132177125,
+        "epochs_trained": 19,
+        "val_rmse_1d": 0.7931914668208712,
+        "val_rmse_7d": 0.7945019140369443,
+        "val_rmse_30d": 0.769605442468647
+      },
+      "directional_accuracy": {
+        "1d": 0.5,
+        "7d": 0.5073529411764706,
+        "30d": 0.47058823529411764
+      }
+    },
+    "lstm": {
+      "train_time_seconds": 378.0150935649872,
+      "metrics": {
+        "train_rmse_1d": 1.2841540052561047,
+        "train_rmse_7d": 1.2851355095289463,
+        "train_rmse_30d": 1.2783666943823169,
+        "epochs_trained": 47,
+        "val_rmse_1d": 0.7838342112047785,
+        "val_rmse_7d": 0.7766749564217115,
+        "val_rmse_30d": 0.7498318711173546
+      },
+      "directional_accuracy": {
+        "1d": 0.5036764705882353,
+        "7d": 0.5073529411764706,
+        "30d": 0.47794117647058826
+      }
+    },
+    "transformer": {
+      "train_time_seconds": 374.95206904411316,
+      "metrics": {
+        "train_rmse_1d": 1.2849941166945855,
+        "train_rmse_7d": 1.296702674209447,
+        "train_rmse_30d": 1.2797309831287134,
+        "epochs_trained": 31,
+        "val_rmse_1d": 0.7885539916692692,
+        "val_rmse_7d": 0.8147157292126764,
+        "val_rmse_30d": 0.7538632205206723
+      },
+      "directional_accuracy": {
+        "1d": 0.4889705882352941,
+        "7d": 0.46691176470588236,
+        "30d": 0.4742647058823529
+      }
+    },
+    "lightgbm": {
+      "train_time_seconds": 0.5781240463256836,
+      "metrics": {
+        "train_mae": [
+          0.7972028082801925,
+          0.7986081312115312,
+          0.7888618717696336
+        ],
+        "val_mae": [
+          0.5709711997516914,
+          0.5636664244855031,
+          0.5425428557515822
+        ]
+      },
+      "directional_accuracy": {
+        "1d": 0.4485294117647059,
+        "7d": 0.5294117647058824,
+        "30d": 0.47058823529411764
+      }
+    },
+    "ensemble": {
+      "train_time_seconds": 2.1815738677978516,
+      "metrics": {}
+    }
+  },
+  "hyperparameter_tuning": {
+    "dlinear": {
+      "kernel_size": 27,
+      "dropout_rate": 0.08487346516301046,
+      "learning_rate": 0.0003839629299804173,
+      "batch_size": 64
+    },
+    "tcn": {
+      "n_filters": 32,
+      "kernel_size": 2,
+      "n_blocks": 3,
+      "dropout_rate": 0.19759909922897934,
+      "learning_rate": 0.0005989003672254305,
+      "batch_size": 64
+    },
+    "lstm": {
+      "n_lstm_layers": 3,
+      "lstm_units_0": 128,
+      "lstm_units_1": 32,
+      "lstm_units_2": 128,
+      "n_dense_layers": 1,
+      "dense_units_0": 32,
+      "dropout_rate": 0.4402264110269135,
+      "learning_rate": 0.0027970646032891224,
+      "batch_size": 32,
+      "use_bidirectional": false,
+      "use_attention": false,
+      "gradient_clip": 1.3187382216073251
+    },
+    "lightgbm": {
+      "num_leaves": 53,
+      "learning_rate": 0.05945199586931454,
+      "feature_fraction": 0.6260206371941118,
+      "bagging_fraction": 0.9795542149013333,
+      "bagging_freq": 7,
+      "min_child_samples": 83,
+      "lambda_l1": 0.0033347927286375843,
+      "lambda_l2": 0.002458603276328005,
+      "max_depth": 8,
+      "n_estimators": 276
+    }
+  },
+  "uncertainty_analysis": {
+    "dlinear": {
+      "mean_ci_width": 2.766010046005249,
+      "median_ci_width": 2.3288354873657227,
+      "mc_samples": 50
+    },
+    "tcn": {
+      "mean_ci_width": 2.31827449798584,
+      "median_ci_width": 1.8452568054199219,
+      "mc_samples": 50
+    },
+    "lstm": {
+      "mean_ci_width": 0.05249294638633728,
+      "median_ci_width": 0.05272141098976135,
+      "mc_samples": 50
+    },
+    "transformer": {
+      "mean_ci_width": 3.7982211154030665e-08,
+      "median_ci_width": 0.0,
+      "mc_samples": 50
+    },
+    "lightgbm": {
+      "mean_uncertainty": 0.0001986813179074311,
+      "median_uncertainty": 8.673617379884035e-19
+    }
+  },
+  "ensemble_evaluation": {
+    "metrics": {
+      "transformer_rmse": 0.7248888219022582,
+      "transformer_mae": 0.49978885506821286,
+      "transformer_mape": 170.00308561337053,
+      "enhanced_lstm_rmse": 0.7129880636862231,
+      "enhanced_lstm_mae": 0.49548501986954924,
+      "enhanced_lstm_mape": 115.26007837450973,
+      "dlinear_rmse": 0.8274102567542365,
+      "dlinear_mae": 0.6107826585720391,
+      "dlinear_mape": 628.1704322123863,
+      "tcn_rmse": 0.7996293463473306,
+      "tcn_mae": 0.5659250194982172,
+      "tcn_mape": 419.0982664186471,
+      "lightgbm_rmse": 0.7141713675456539,
+      "lightgbm_mae": 0.49702105472310054,
+      "lightgbm_mape": 113.67548364273378,
+      "ensemble_rmse": 0.7243231667929997,
+      "ensemble_mae": 0.5042436236077336,
+      "ensemble_mape": 230.37856043044647,
+      "improvement_pct": -1.5898026466492121
+    },
+    "weights": {
+      "dlinear": 0.18325134486099526,
+      "tcn": 0.19834134365986963,
+      "transformer": 0.20483575856075464,
+      "enhanced_lstm": 0.2068591560349461,
+      "lightgbm": 0.2067123968834343
+    }
+  }
+}

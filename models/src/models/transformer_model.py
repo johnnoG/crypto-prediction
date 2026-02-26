@@ -182,8 +182,8 @@ class TransformerBlock(layers.Layer):
         self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = layers.LayerNormalization(epsilon=1e-6)
 
-        self.dropout1 = layers.Dropout(dropout_rate)
-        self.dropout2 = layers.Dropout(dropout_rate)
+        self.dropout1 = MCDropout(dropout_rate)
+        self.dropout2 = MCDropout(dropout_rate)
 
     def call(self, inputs, training=None, mask=None):
         # Self-attention block

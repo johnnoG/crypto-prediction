@@ -1,0 +1,37 @@
+{
+  "trained_at": "2026-02-21T07:56:27.351777",
+  "n_samples_train": 1599,
+  "n_samples_val": 272,
+  "input_shape": [
+    60,
+    51
+  ],
+  "config": {
+    "sequence_length": 60,
+    "n_features": 51,
+    "kernel_size": 27,
+    "dropout_rate": 0.09263103092182289,
+    "learning_rate": 0.00013492834268013249,
+    "batch_size": 64,
+    "epochs": 150,
+    "early_stopping_patience": 10,
+    "multi_step": [
+      1,
+      7,
+      30
+    ]
+  },
+  "metrics": {
+    "train_rmse_1d": 1.0869639604608692,
+    "train_rmse_7d": 1.0838027333259808,
+    "train_rmse_30d": 1.089705891198448,
+    "epochs_trained": 40,
+    "val_rmse_1d": 0.8407982059009134,
+    "val_rmse_7d": 0.865945531627945,
+    "val_rmse_30d": 0.9118044643630694
+  },
+  "version": "production",
+  "model_path": "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/dlinear/dlinear_vproduction_20260221_081137.h5",
+  "framework": "tensorflow",
+  "model_type": "dlinear"
+}

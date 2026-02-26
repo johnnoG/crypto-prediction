@@ -1,0 +1,209 @@
+{
+  "crypto": "DOT",
+  "timestamp": "2026-02-22T14:34:55.259166",
+  "pipeline_flags": {
+    "tune": true,
+    "walk_forward": true,
+    "uncertainty": true,
+    "advanced_mlflow": true
+  },
+  "config": {
+    "sequence_length": 60,
+    "epochs": 150,
+    "batch_size": 32,
+    "max_features": 50,
+    "train_ratio": 0.7,
+    "val_ratio": 0.15
+  },
+  "models": {
+    "dlinear": {
+      "train_time_seconds": 13.878751993179321,
+      "metrics": {
+        "train_rmse_1d": 1.0664018106611401,
+        "train_rmse_7d": 1.2422944378105412,
+        "train_rmse_30d": 1.3726566859301863,
+        "epochs_trained": 16,
+        "val_rmse_1d": 1.2204404029895133,
+        "val_rmse_7d": 1.2261921240401155,
+        "val_rmse_30d": 1.269066935798653
+      },
+      "directional_accuracy": {
+        "1d": 0.50920245398773,
+        "7d": 0.5337423312883436,
+        "30d": 0.48466257668711654
+      }
+    },
+    "tcn": {
+      "train_time_seconds": 115.04894065856934,
+      "metrics": {
+        "train_rmse_1d": 0.9018913694600404,
+        "train_rmse_7d": 0.9064079776532367,
+        "train_rmse_30d": 0.8968825527484117,
+        "epochs_trained": 13,
+        "val_rmse_1d": 1.1910029052427114,
+        "val_rmse_7d": 1.195822761880508,
+        "val_rmse_30d": 1.2278895371195084
+      },
+      "directional_accuracy": {
+        "1d": 0.5030674846625767,
+        "7d": 0.48466257668711654,
+        "30d": 0.4601226993865031
+      }
+    },
+    "lstm": {
+      "train_time_seconds": 504.860652923584,
+      "metrics": {
+        "train_rmse_1d": 0.9068510755354859,
+        "train_rmse_7d": 0.9085335644777549,
+        "train_rmse_30d": 0.9045240515261256,
+        "epochs_trained": 25,
+        "val_rmse_1d": 1.1942587591370417,
+        "val_rmse_7d": 1.1936701480310075,
+        "val_rmse_30d": 1.2049857973586586
+      },
+      "directional_accuracy": {
+        "1d": 0.4785276073619632,
+        "7d": 0.48466257668711654,
+        "30d": 0.48466257668711654
+      }
+    },
+    "transformer": {
+      "train_time_seconds": 159.82809686660767,
+      "metrics": {
+        "train_rmse_1d": 0.982279208327395,
+        "train_rmse_7d": 0.915276557941167,
+        "train_rmse_30d": 0.9128370288523707,
+        "epochs_trained": 18,
+        "val_rmse_1d": 1.2237992688513102,
+        "val_rmse_7d": 1.2434908064329708,
+        "val_rmse_30d": 1.2295703562980715
+      },
+      "directional_accuracy": {
+        "1d": 0.44171779141104295,
+        "7d": 0.49693251533742333,
+        "30d": 0.4785276073619632
+      }
+    },
+    "lightgbm": {
+      "train_time_seconds": 0.40881991386413574,
+      "metrics": {
+        "train_mae": [
+          0.6489725364283019,
+          0.6191158753098901,
+          0.6435007331590137
+        ],
+        "val_mae": [
+          0.7717256532331197,
+          0.7696063920117209,
+          0.777012856393537
+        ]
+      },
+      "directional_accuracy": {
+        "1d": 0.4723926380368098,
+        "7d": 0.5214723926380368,
+        "30d": 0.48466257668711654
+      }
+    },
+    "ensemble": {
+      "train_time_seconds": 2.2769689559936523,
+      "metrics": {}
+    }
+  },
+  "hyperparameter_tuning": {
+    "dlinear": {
+      "kernel_size": 22,
+      "dropout_rate": 0.12305961637549659,
+      "learning_rate": 0.0005988751231170383,
+      "batch_size": 32
+    },
+    "tcn": {
+      "n_filters": 64,
+      "kernel_size": 5,
+      "n_blocks": 4,
+      "dropout_rate": 0.20921234900373095,
+      "learning_rate": 0.005550848532063986,
+      "batch_size": 32
+    },
+    "lstm": {
+      "n_lstm_layers": 2,
+      "lstm_units_0": 64,
+      "lstm_units_1": 128,
+      "n_dense_layers": 1,
+      "dense_units_0": 16,
+      "dropout_rate": 0.3166395948992788,
+      "learning_rate": 0.002176216179382037,
+      "batch_size": 32,
+      "use_bidirectional": false,
+      "use_attention": false,
+      "gradient_clip": 0.5167800634717521
+    },
+    "lightgbm": {
+      "num_leaves": 53,
+      "learning_rate": 0.05045321958909213,
+      "feature_fraction": 0.7168578594140872,
+      "bagging_fraction": 0.7465447373174766,
+      "bagging_freq": 4,
+      "min_child_samples": 81,
+      "lambda_l1": 0.0009962513222055117,
+      "lambda_l2": 0.11400863701127326,
+      "max_depth": 7,
+      "n_estimators": 118
+    }
+  },
+  "uncertainty_analysis": {
+    "dlinear": {
+      "mean_ci_width": 1.0420774221420288,
+      "median_ci_width": 0.9663364291191101,
+      "mc_samples": 50
+    },
+    "tcn": {
+      "mean_ci_width": 1.2310407161712646,
+      "median_ci_width": 0.9558284282684326,
+      "mc_samples": 50
+    },
+    "lstm": {
+      "mean_ci_width": 0.1019895002245903,
+      "median_ci_width": 0.09836483001708984,
+      "mc_samples": 50
+    },
+    "transformer": {
+      "mean_ci_width": 0.20962224900722504,
+      "median_ci_width": 0.20930305123329163,
+      "mc_samples": 50
+    },
+    "lightgbm": {
+      "mean_uncertainty": 0.015176923968856696,
+      "median_uncertainty": 0.0029652358729756944
+    }
+  },
+  "ensemble_evaluation": {
+    "metrics": {
+      "transformer_rmse": 1.0698180870113736,
+      "transformer_mae": 0.724409145448832,
+      "transformer_mape": 227.68560036276995,
+      "enhanced_lstm_rmse": 1.0651337448254237,
+      "enhanced_lstm_mae": 0.7080689000494388,
+      "enhanced_lstm_mape": 130.863070402783,
+      "dlinear_rmse": 1.098897455293126,
+      "dlinear_mae": 0.7475926490531445,
+      "dlinear_mape": 306.1967249816684,
+      "tcn_rmse": 1.0589922818751871,
+      "tcn_mae": 0.6907996955887274,
+      "tcn_mape": 125.26595375188742,
+      "lightgbm_rmse": 1.0583144016400459,
+      "lightgbm_mae": 0.6974925422531659,
+      "lightgbm_mape": 101.13157573514655,
+      "ensemble_rmse": 1.064195701719748,
+      "ensemble_mae": 0.7062005196114729,
+      "ensemble_mape": 137.94458606888566,
+      "improvement_pct": -0.5557233342556904
+    },
+    "weights": {
+      "dlinear": 0.19242200438293927,
+      "tcn": 0.2016750366517571,
+      "transformer": 0.19450259616858154,
+      "enhanced_lstm": 0.20472514088208527,
+      "lightgbm": 0.20667522191463686
+    }
+  }
+}

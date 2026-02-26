@@ -95,7 +95,7 @@ class CryptoDataService:
         """Get current price data."""
         try:
             # Major cryptocurrencies
-            symbols = ["BTC", "ETH", "SOL", "ADA", "DOT", "LINK", "UNI", "AVAX", "MATIC", "ATOM"]
+            symbols = ["BTC", "ETH", "BNB", "SOL", "ADA", "DOT", "LINK", "UNI", "AVAX", "MATIC", "ATOM"]
             
             # Get prices from aggregator
             aggregator = await get_aggregator()

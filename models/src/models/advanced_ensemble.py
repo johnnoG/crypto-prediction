@@ -251,6 +251,7 @@ class AdvancedEnsemble:
         self.meta_model: Optional[Any] = None
         self.meta_model_names: List[str] = []
         self._weights_from_validation = False  # True when inverse-RMSE weights set
+        self.meta_has_regime_features = False  # True when regime cols added to meta-features
         self.regime_detector = MarketRegimeDetector(
             lookback_window=self.config.get('regime_lookback', 20)
         )
@@ -514,6 +515,17 @@ class AdvancedEnsemble:
             val_stacked = val_stacked[:n]
             y_meta = y_meta[:n]
 
+            # Append rolling regime features if price history provided
+            self.meta_has_regime_features = False
+            if price_history is not None:
+                try:
+                    reg_feats = self._rolling_regime_features(price_history, n)
+                    val_stacked = np.column_stack([val_stacked, reg_feats])
+                    self.meta_has_regime_features = True
+                    print(f"Added {reg_feats.shape[1]} rolling regime features to meta-features")
+                except Exception as e:
+                    print(f"Regime feature extraction failed, skipping: {e}")
+
             # --- Cross-validate meta-learner on validation predictions ---
             tscv = TimeSeriesSplit(n_splits=3)
             oof_ens = np.full(n, np.nan)
@@ -698,6 +710,31 @@ class AdvancedEnsemble:
 
         return np.array(features).reshape(1, -1)
 
+    def _rolling_regime_features(self, price_history: np.ndarray, n_samples: int) -> np.ndarray:
+        """
+        Build (n_samples, 3) regime feature matrix using a rolling window.
+        Each row uses the price history up to that validation timestep.
+        `price_history` should be the full raw price series for train+val.
+        """
+        lookback = self.config.get('regime_lookback', 20)
+        features = []
+        start = max(0, len(price_history) - n_samples - lookback)
+        ph_window = price_history[start:]
+
+        for i in range(n_samples):
+            window_end = len(ph_window) - n_samples + i + 1
+            window = ph_window[max(0, window_end - lookback): window_end]
+            if len(window) < 5:
+                features.append([0.0, 0.0, 0.0])
+            else:
+                info = self.regime_detector.detect_regime(window)
+                features.append([
+                    info['metrics'].get('trend_slope', 0),
+                    info['metrics'].get('volatility', 0),
+                    info.get('scores', {}).get('mean_reverting', 0),
+                ])
+        return np.array(features, dtype=np.float32)  # (n_samples, 3)
+
     def _initialize_regime_weights(self, price_history: np.ndarray) -> None:
         """Initialize weights based on current market regime.
 
@@ -770,12 +807,16 @@ class AdvancedEnsemble:
             else:
                 stacked_features = np.column_stack(list(base_predictions.values()))
 
-            # Add regime features
-            if price_history is not None:
-                regime_features = self._extract_regime_features(price_history)
-                # Broadcast regime features to match batch size
-                regime_features = np.repeat(regime_features, len(stacked_features), axis=0)
-                stacked_features = np.column_stack([stacked_features, regime_features])
+            # Add regime features when meta-learner was trained with them
+            if getattr(self, 'meta_has_regime_features', False):
+                if price_history is not None:
+                    regime_features = self._extract_regime_features(price_history)
+                    regime_features = np.repeat(regime_features, len(stacked_features), axis=0)
+                    stacked_features = np.column_stack([stacked_features, regime_features])
+                else:
+                    # Meta-learner expects regime cols — pad with zeros
+                    zeros = np.zeros((len(stacked_features), 3), dtype=np.float32)
+                    stacked_features = np.column_stack([stacked_features, zeros])
 
             ensemble_pred = self.meta_model.predict(stacked_features)
         else:

@@ -1,0 +1,52 @@
+{
+  "trained_at": "2026-02-21T04:15:12.067527",
+  "n_samples_train": 11019,
+  "n_samples_val": 717,
+  "input_shape": [
+    60,
+    51
+  ],
+  "config": {
+    "sequence_length": 60,
+    "n_features": 51,
+    "lstm_units": [
+      64,
+      32
+    ],
+    "dense_units": [
+      32
+    ],
+    "dropout_rate": 0.4,
+    "recurrent_dropout": 0.0,
+    "learning_rate": 0.0005,
+    "batch_size": 32,
+    "epochs": 150,
+    "early_stopping_patience": 10,
+    "gradient_clip": 1.0,
+    "use_bidirectional": true,
+    "use_attention": true,
+    "use_residual": true,
+    "use_layer_norm": true,
+    "multi_step": [
+      1,
+      7,
+      30
+    ],
+    "teacher_forcing_ratio": 0.5,
+    "mc_samples": 100,
+    "l2_reg": 0.0001
+  },
+  "metrics": {
+    "train_rmse_1d": 1.7440571860546472,
+    "train_rmse_7d": 1.7451948862562205,
+    "train_rmse_30d": 1.7055843590430446,
+    "epochs_trained": 39,
+    "val_rmse_1d": 0.9055904957488253,
+    "val_rmse_7d": 0.9048769251268668,
+    "val_rmse_30d": 0.8838688980345961
+  },
+  "version": "production",
+  "model_path": "/Users/yonatanglanzman/src/crypto-prediction/models/artifacts/enhanced_lstm/enhanced_lstm_vproduction_20260221_045102.h5",
+  "framework": "tensorflow",
+  "model_type": "enhanced_lstm"
+}

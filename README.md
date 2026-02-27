@@ -51,6 +51,7 @@ python3 models/src/build_manifest.py
 ```
 
 Training outputs:
+
 - Model weights saved to `models/artifacts/`
 - 10 diagnostic PNG plots saved to `models/src/training_output/`
 - JSON training report with metrics, uncertainty analysis, ensemble evaluation
@@ -185,65 +186,65 @@ For detailed model documentation including architecture diagrams, hyperparameter
 
 Each training run generates 10 diagnostic plots:
 
-| Plot | Description |
-|------|-------------|
-| `loss_curves.png` | Train vs validation loss for each model |
-| `metrics_progression.png` | Per-horizon loss progression over training |
-| `learning_rates.png` | LR schedules (warmup, decay, plateau) |
-| `attention_heatmap.png` | LSTM attention weights over timesteps |
-| `feature_importance.png` | Top 30 LightGBM features |
-| `model_comparison.png` | RMSE/MAE bars across all models |
-| `predictions_vs_actual.png` | Scatter plots with R-squared |
-| `residual_analysis.png` | Residual distributions |
-| `ensemble_weights.png` | Model contribution weights |
-| `training_summary.png` | Multi-panel overview |
+| Plot                        | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `loss_curves.png`           | Train vs validation loss for each model    |
+| `metrics_progression.png`   | Per-horizon loss progression over training |
+| `learning_rates.png`        | LR schedules (warmup, decay, plateau)      |
+| `attention_heatmap.png`     | LSTM attention weights over timesteps      |
+| `feature_importance.png`    | Top 30 LightGBM features                   |
+| `model_comparison.png`      | RMSE/MAE bars across all models            |
+| `predictions_vs_actual.png` | Scatter plots with R-squared               |
+| `residual_analysis.png`     | Residual distributions                     |
+| `ensemble_weights.png`      | Model contribution weights                 |
+| `training_summary.png`      | Multi-panel overview                       |
 
 ## Technology Stack
 
 ### Machine Learning
 
-| Component | Technology |
-|-----------|------------|
-| Deep Learning | TensorFlow/Keras (DLinear, TCN, LSTM, Transformer) |
-| Gradient Boosting | LightGBM, XGBoost |
-| Hyperparameter Tuning | Optuna (Bayesian optimization) |
-| Experiment Tracking | MLflow (logging, model registry) |
-| Feature Engineering | Pandas, NumPy, TA-Lib, Statsmodels |
-| Preprocessing | Scikit-learn (RobustScaler, metrics) |
-| Interpretability | SHAP |
-| Visualization | Matplotlib, Seaborn, Plotly, Dash |
+| Component             | Technology                                         |
+| --------------------- | -------------------------------------------------- |
+| Deep Learning         | TensorFlow/Keras (DLinear, TCN, LSTM, Transformer) |
+| Gradient Boosting     | LightGBM, XGBoost                                  |
+| Hyperparameter Tuning | Optuna (Bayesian optimization)                     |
+| Experiment Tracking   | MLflow (logging, model registry)                   |
+| Feature Engineering   | Pandas, NumPy, TA-Lib, Statsmodels                 |
+| Preprocessing         | Scikit-learn (RobustScaler, metrics)               |
+| Interpretability      | SHAP                                               |
+| Visualization         | Matplotlib, Seaborn, Plotly, Dash                  |
 
 ### Backend
 
-| Component | Technology |
-|-----------|------------|
-| Framework | FastAPI with async support |
-| Database | PostgreSQL 16 + SQLAlchemy + Alembic |
-| Cache | Redis 7 |
-| Auth | Argon2 password hashing + JWT tokens |
-| HTTP Client | HTTPX (async) |
-| Rate Limiting | SlowAPI |
-| External APIs | CoinGecko, Binance, CryptoCompare |
+| Component     | Technology                           |
+| ------------- | ------------------------------------ |
+| Framework     | FastAPI with async support           |
+| Database      | PostgreSQL 16 + SQLAlchemy + Alembic |
+| Cache         | Redis 7                              |
+| Auth          | Argon2 password hashing + JWT tokens |
+| HTTP Client   | HTTPX (async)                        |
+| Rate Limiting | SlowAPI                              |
+| External APIs | CoinGecko, Binance, CryptoCompare    |
 
 ### Frontend
 
-| Component | Technology |
-|-----------|------------|
-| Framework | React 19 + TypeScript |
-| Build Tool | Vite |
-| Styling | Tailwind CSS |
-| Data Fetching | React Query |
-| Charts | Lightweight Charts (TradingView) |
-| Icons | Lucide React |
+| Component     | Technology                       |
+| ------------- | -------------------------------- |
+| Framework     | React 19 + TypeScript            |
+| Build Tool    | Vite                             |
+| Styling       | Tailwind CSS                     |
+| Data Fetching | React Query                      |
+| Charts        | Lightweight Charts (TradingView) |
+| Icons         | Lucide React                     |
 
 ### Infrastructure
 
-| Component | Technology |
-|-----------|------------|
+| Component        | Technology              |
+| ---------------- | ----------------------- |
 | Containerization | Docker + Docker Compose |
-| Web Server | Nginx (reverse proxy) |
-| CI/CD | GitHub Actions |
-| Monitoring | Prometheus, Sentry |
+| Web Server       | Nginx (reverse proxy)   |
+| CI/CD            | GitHub Actions          |
+| Monitoring       | Prometheus, Sentry      |
 
 ## Data
 
@@ -309,24 +310,24 @@ docker-compose exec backend alembic upgrade head
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | System health check |
-| `GET /health/detailed` | Database + cache + service health |
-| `POST /api/auth/signup` | User registration |
-| `POST /api/auth/signin` | JWT authentication |
-| `GET /api/prices` | Live cryptocurrency prices (cache-backed) |
-| `GET /api/forecasts` | ML price forecasts |
-| `GET /api/market/data` | Market summary |
-| `GET /api/alerts` | User price alerts (auth required) |
-| `POST /api/alerts` | Create price alert (auth required) |
-| `GET /api/watchlist` | User watchlist (auth required) |
-| `POST /api/watchlist` | Add to watchlist (auth required) |
-| `GET /api/portfolio/holdings` | User portfolio holdings (auth required) |
-| `POST /api/portfolio/holdings` | Add holding (auth required) |
-| `PUT /api/portfolio/holdings/{id}` | Update holding (auth required) |
-| `DELETE /api/portfolio/holdings/{id}` | Remove holding (auth required) |
-| `WS /api/stream/ws` | Real-time price WebSocket |
+| Endpoint                              | Description                               |
+| ------------------------------------- | ----------------------------------------- |
+| `GET /health`                         | System health check                       |
+| `GET /health/detailed`                | Database + cache + service health         |
+| `POST /api/auth/signup`               | User registration                         |
+| `POST /api/auth/signin`               | JWT authentication                        |
+| `GET /api/prices`                     | Live cryptocurrency prices (cache-backed) |
+| `GET /api/forecasts`                  | ML price forecasts                        |
+| `GET /api/market/data`                | Market summary                            |
+| `GET /api/alerts`                     | User price alerts (auth required)         |
+| `POST /api/alerts`                    | Create price alert (auth required)        |
+| `GET /api/watchlist`                  | User watchlist (auth required)            |
+| `POST /api/watchlist`                 | Add to watchlist (auth required)          |
+| `GET /api/portfolio/holdings`         | User portfolio holdings (auth required)   |
+| `POST /api/portfolio/holdings`        | Add holding (auth required)               |
+| `PUT /api/portfolio/holdings/{id}`    | Update holding (auth required)            |
+| `DELETE /api/portfolio/holdings/{id}` | Remove holding (auth required)            |
+| `WS /api/stream/ws`                   | Real-time price WebSocket                 |
 
 Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 
@@ -349,36 +350,33 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Portfolio Backend + Frontend (Feb 26)** — Full-stack portfolio holdings tracker. SQLAlchemy `PortfolioHolding` model with per-user UniqueConstraint, CRUD API (`GET/POST/PUT/DELETE /api/portfolio/holdings`), Alembic migration, React Query hooks (`usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding`), and live portfolio page with real prices, P&L calculations, inline add/edit/delete UI, and loading/error/empty states. Replaced all hardcoded mock data.
 - **Portfolio Navigation + Prices Fix (Feb 27)** — Portfolio added to nav bar and user dropdown; Markets removed from nav (no data source). `PROTECTED_PAGES` updated to `['forecasts', 'news', 'watchlist', 'portfolio']`. Fixed `apiClient.getPrices()` to call `GET /api/prices` (correct cache-backed endpoint returning `{ coin_id: { usd } }`) instead of `GET /api/crypto/prices` (aggregated format that ignores `ids` param) — fixes live prices in Portfolio, PriceTicker, and RealTimeCryptoGrid. Added LTC, XRP, DOGE to `smart_cache_service` major coin list.
 - **Alert Delivery + Alert UI (Feb 27)** — Full end-to-end alert pipeline. Backend: `alert_checker.py` APScheduler job (default every 5 min) polls `prices_major_cryptos.json`, evaluates all `ACTIVE PRICE_TARGET` alerts, sets `status=TRIGGERED` in DB, and dispatches email via `notification_service.py` (HTML email, async `smtplib` via `asyncio.to_thread`, silent no-op if SMTP not configured). Frontend: `ForecastPanel` "Set Alert" button now opens a modal (live price preview, above/below toggle, editable target price) instead of silently creating an alert at +5%. `AlertsPage` gains a "+ New Alert" button that expands an inline form with coin dropdown (15 options), condition toggle, and target price field.
+- **WebSocket Streaming Fix (Feb 27)** — Removed two intentional bypasses in `useWebSocketStream.ts` that forced all connections into REST polling. Hook now connects to `ws://…/api/stream/ws` first, handles `initial_prices` (converts CoinGecko simple-price format to `StreamData`) and `price_update` messages, retries up to 5 times with 5-second backoff, and only falls back to `GET /api/stream/snapshot` polling after all retries are exhausted. Also fixed snapshot URL (was missing `/api` prefix) and added proper `isConnected` state tracking.
 
 ### Training Results Summary (Feb 2026)
 
 **Original 5 coins** — trained Feb 21, 2026 with Optuna tuning + walk-forward + MC dropout UQ:
 
-| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d) |
-|------|-----------|-----------|---------------|------------------|--------------|
-| BTC | LightGBM | 0.716 | 0.739 | -3.3% | 53.3% (LightGBM) |
-| ETH | LSTM | 0.948 | 0.958 | -1.1% | 51.5% (DLinear) |
-| LTC | TCN | 0.818 | 0.821 | -0.3% | 54.0% (DLinear) |
-| XRP | LSTM | 0.900 | 0.933 | -3.6% | 51.8% (Transformer) |
-| DOGE | LSTM | 1.085 | 1.097 | -1.1% | 57.0% (Transformer) |
+| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d)        |
+| ---- | ---------- | --------- | ------------- | ---------------- | ------------------- |
+| BTC  | LightGBM   | 0.716     | 0.739         | -3.3%            | 53.3% (LightGBM)    |
+| ETH  | LSTM       | 0.948     | 0.958         | -1.1%            | 51.5% (DLinear)     |
+| LTC  | TCN        | 0.818     | 0.821         | -0.3%            | 54.0% (DLinear)     |
+| XRP  | LSTM       | 0.900     | 0.933         | -3.6%            | 51.8% (Transformer) |
+| DOGE | LSTM       | 1.085     | 1.097         | -1.1%            | 57.0% (Transformer) |
 
 **New 5 coins** — trained Feb 22, 2026:
 
-| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d) |
-|------|-----------|-----------|---------------|------------------|--------------|
-| BNB | LSTM | 0.713 | 0.724 | -1.6% | 50.4% (LSTM) |
-| SOL | LightGBM | 0.625 | 0.630 | -0.8% | 51.1% (Transformer) |
-| ADA | LSTM | 0.885 | 0.891 | -0.7% | 50.7% (TCN) |
-| LINK | TCN | 0.763 | 0.757 | **+0.8%** | 52.6% (LSTM) |
-| DOT | TCN | 1.059 | 1.064 | -0.5% | 50.9% (DLinear) |
+| Coin | Best Model | Test RMSE | Ensemble RMSE | Ensemble vs Best | Best DA (1d)        |
+| ---- | ---------- | --------- | ------------- | ---------------- | ------------------- |
+| BNB  | LSTM       | 0.713     | 0.724         | -1.6%            | 50.4% (LSTM)        |
+| SOL  | LightGBM   | 0.625     | 0.630         | -0.8%            | 51.1% (Transformer) |
+| ADA  | LSTM       | 0.885     | 0.891         | -0.7%            | 50.7% (TCN)         |
+| LINK | TCN        | 0.763     | 0.757         | **+0.8%**        | 52.6% (LSTM)        |
+| DOT  | TCN        | 1.059     | 1.064         | -0.5%            | 50.9% (DLinear)     |
 
 LINK is the first coin where the ensemble beats the best individual model (+0.8%). New coins show tighter train/val gaps and faster convergence (13-47 epochs) than the original 5. SOL has the best absolute RMSE (0.625); DOT is the hardest to predict (1.059).
 
 See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) for detailed results, hyperparameters, and analysis.
-
-### In Progress
-
-- WebSocket streaming integration in frontend (infrastructure complete, bypass in `useWebSocketStream.ts` needs debugging)
 
 ### Planned
 

@@ -6,6 +6,7 @@ from .news import NewsSource, NewsArticle, NewsSentiment, NewsTopics
 from .user import User
 from .alert import UserAlert, AlertType, AlertStatus
 from .watchlist import UserWatchlist
+from .portfolio import PortfolioHolding
 
 __all__ = [
     "Base",
@@ -19,7 +20,8 @@ __all__ = [
     "UserAlert",
     "AlertType",
     "AlertStatus",
-    "UserWatchlist"
+    "UserWatchlist",
+    "PortfolioHolding",
 ]
 
 

@@ -23,6 +23,7 @@ try:
     from .api.auth import router as auth_router
     from .api.alerts import router as alerts_router
     from .api.watchlist import router as watchlist_router
+    from .api.portfolio import router as portfolio_router
     from .api.rate_limit_monitor import router as rate_limit_router
     from .api.health import router as health_router
     from .api.metrics import router as metrics_router
@@ -37,6 +38,7 @@ except ImportError:
     from api.auth import router as auth_router
     from api.alerts import router as alerts_router
     from api.watchlist import router as watchlist_router
+    from api.portfolio import router as portfolio_router
     from api.rate_limit_monitor import router as rate_limit_router
     from api.health import router as health_router
     from api.metrics import router as metrics_router
@@ -237,6 +239,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router, prefix="/api")  # Auth routes first
     app.include_router(alerts_router, prefix="/api")  # User alerts
     app.include_router(watchlist_router, prefix="/api")  # User watchlist
+    app.include_router(portfolio_router, prefix="/api")  # User portfolio
     app.include_router(health_router)  # Health monitoring (no prefix for system routes)
     app.include_router(metrics_router)  # Prometheus metrics (no prefix for system routes)
     app.include_router(admin_router, prefix="/api")  # Admin functions

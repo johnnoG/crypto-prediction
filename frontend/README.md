@@ -5,13 +5,13 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 ## What’s Implemented
 
 - Single‑page dashboard with in-app page switching (no react-router).
-- **Public landing page** — hero section ("The Future of Crypto Intelligence") is visible without signing in. All other nav pages (Markets, Forecasts, News, Watchlist) are auth-gated: clicking them while signed out opens the sign-in modal instead of navigating.
+- **Public landing page** — hero section ("The Future of Crypto Intelligence") is visible without signing in. Forecasts, News, Watchlist, and Portfolio are auth-gated: clicking them while signed out opens the sign-in modal.
 - Real‑time crypto grid with streaming + polling fallback.
 - Forecasting UI with real trained ML models (LightGBM, LSTM, Transformer, TCN, DLinear) replacing the previous ARIMA/ETS/SARIMA placeholders.
 - News feed with sentiment highlights and pagination.
-- Market data views, technical indicators, and charts.
 - User auth (JWT) + OAuth callback handling.
 - Watchlist + alerts management UI.
+- **Portfolio tracker** — full CRUD holdings manager backed by real API. Displays live prices via CoinGecko, calculates total portfolio value, total cost basis, and overall P&L per holding. Supports adding (15-coin dropdown), inline editing amount/avg buy price, and removing holdings. Loading, error, and empty states included.
 - Global error boundaries, loading/skeleton states, and toasts.
 
 ## Tech Stack
@@ -36,23 +36,27 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 ## Pages & Key Components
 
 - Home (`HomePage`): **public** — hero section only when signed out; full content (markets grid, forecasts, news, features) when signed in
-- Markets (`MarketsPage`): **requires sign-in** — charting widgets
 - Forecasts (`ForecastsPage` + `ForecastPanel`): **requires sign-in** — live ML model selection and forecast display
 - News (`NewsPage` + `NewsPanel`): **requires sign-in**
 - Watchlist (`WatchlistPage`): **requires sign-in**
+- Portfolio (`PortfolioPage`): **requires sign-in** — live holdings table with P&L, add/edit/delete per row, summary cards (total value, total cost, total gain/loss). Uses `usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding` hooks backed by real REST API.
 - Alerts: `AlertsPage`
 - Settings: `SettingsPage`
-- Portfolio (placeholder UI): `PortfolioPage`
+- Markets (`MarketsPage`): accessible via app routing but **removed from the nav bar** (charting widgets had no data source).
 
 ### Auth-gated Navigation (`Header.tsx`)
 
-`PROTECTED_PAGES = ['markets', 'forecasts', 'news', 'watchlist']`
+`PROTECTED_PAGES = ['forecasts', 'news', 'watchlist', 'portfolio']`
+
+Nav bar items: Home → Forecasts → News → Watchlist → Portfolio
 
 When an unauthenticated user clicks a protected nav item:
 - The sign-in modal opens immediately
 - Navigation does not occur
-- A lock icon (🔒) is shown next to each protected nav item label
+- A lock icon is shown next to each protected nav item label
 - Lock icons disappear after signing in
+
+Portfolio is also reachable from the **user dropdown menu** (avatar → "My Portfolio"), alongside My Watchlist and My Alerts.
 
 ## Backend Integration
 
@@ -67,7 +71,7 @@ Note: `frontend/src/contexts/AuthContext.tsx` currently uses a hard-coded base U
 From `frontend/src/lib/api.ts` and hooks:
 
 - Prices + market data:
-  - `GET /api/crypto/prices`
+  - `GET /api/prices` — cache-backed simple prices; returns `{ coin_id: { usd: price } }`
   - `GET /api/market/data`
 - Forecasts:
   - `GET /api/forecasts`
@@ -97,6 +101,11 @@ From `frontend/src/lib/api.ts` and hooks:
   - `GET /api/watchlist`
   - `PUT /api/watchlist/{id}`
   - `DELETE /api/watchlist/{id}`
+- Portfolio:
+  - `GET /api/portfolio/holdings`
+  - `POST /api/portfolio/holdings`
+  - `PUT /api/portfolio/holdings/{id}`
+  - `DELETE /api/portfolio/holdings/{id}`
 - Streaming:
   - `GET /stream/snapshot` (polling fallback)
   - `GET /health/quick` (streaming preflight)
@@ -140,3 +149,4 @@ npm run preview
 - Auth tokens are stored in `localStorage` (`auth_tokens`, `auth_user`).
 - Errors on protected endpoints trigger a client-side logout event.
 - `ForecastPanel` fetches `/api/forecasts/models` on mount to determine which ML models are available from the backend. Model options shown in the UI (LightGBM, LSTM, Transformer, TCN, DLinear, Ensemble) reflect actual trained artifacts rather than static placeholders.
+- `apiClient.getPrices()` calls `GET /api/prices` (cache-backed, returns CoinGecko simple-price format). Do **not** use `GET /api/crypto/prices` for live price data — that endpoint returns a different aggregated format and ignores the `ids` parameter.

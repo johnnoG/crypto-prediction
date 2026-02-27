@@ -313,12 +313,20 @@ docker-compose exec backend alembic upgrade head
 |----------|-------------|
 | `GET /health` | System health check |
 | `GET /health/detailed` | Database + cache + service health |
-| `POST /auth/signup` | User registration |
-| `POST /auth/signin` | JWT authentication |
-| `GET /api/crypto/prices` | Live cryptocurrency prices |
-| `GET /api/forecasts/{symbol}` | ML price forecasts |
-| `GET /api/market/overview` | Market summary |
-| `WS /api/stream` | Real-time price WebSocket |
+| `POST /api/auth/signup` | User registration |
+| `POST /api/auth/signin` | JWT authentication |
+| `GET /api/prices` | Live cryptocurrency prices (cache-backed) |
+| `GET /api/forecasts` | ML price forecasts |
+| `GET /api/market/data` | Market summary |
+| `GET /api/alerts` | User price alerts (auth required) |
+| `POST /api/alerts` | Create price alert (auth required) |
+| `GET /api/watchlist` | User watchlist (auth required) |
+| `POST /api/watchlist` | Add to watchlist (auth required) |
+| `GET /api/portfolio/holdings` | User portfolio holdings (auth required) |
+| `POST /api/portfolio/holdings` | Add holding (auth required) |
+| `PUT /api/portfolio/holdings/{id}` | Update holding (auth required) |
+| `DELETE /api/portfolio/holdings/{id}` | Remove holding (auth required) |
+| `WS /api/stream/ws` | Real-time price WebSocket |
 
 Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 
@@ -337,6 +345,9 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Auth-gated Navigation** — Landing page hero is publicly accessible. Markets, Forecasts, News, and Watchlist require authentication; unauthenticated clicks open the sign-in modal. ForecastPanel shows real trained ML models instead of placeholders.
 - **Transformer MCDropout Fix (Feb 26)** — `TransformerBlock.dropout1/dropout2` changed from `layers.Dropout` to `MCDropout` (always-on). Previously the transformer body was deterministic → all 50 MC passes identical → CI ≈ 0. Fix produces meaningful variance on next retrain.
 - **Ensemble Regime Features (Feb 26)** — `_rolling_regime_features()` appends per-timestep rolling regime stats to OOF predictions during meta-learner training. Eliminates training/inference feature mismatch; meta-learner can now learn regime-conditioned blending.
+- **Original 5 Coins Retrained (Feb 26)** — BTC, ETH, LTC, XRP, DOGE retrained with both Feb 26 fixes applied: MCDropout in attention layers produces non-zero transformer CI; ensemble meta-learner trained with rolling regime features.
+- **Portfolio Backend + Frontend (Feb 26)** — Full-stack portfolio holdings tracker. SQLAlchemy `PortfolioHolding` model with per-user UniqueConstraint, CRUD API (`GET/POST/PUT/DELETE /api/portfolio/holdings`), Alembic migration, React Query hooks (`usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding`), and live portfolio page with real prices, P&L calculations, inline add/edit/delete UI, and loading/error/empty states. Replaced all hardcoded mock data.
+- **Portfolio Navigation + Prices Fix (Feb 27)** — Portfolio added to nav bar and user dropdown; Markets removed from nav (no data source). `PROTECTED_PAGES` updated to `['forecasts', 'news', 'watchlist', 'portfolio']`. Fixed `apiClient.getPrices()` to call `GET /api/prices` (correct cache-backed endpoint returning `{ coin_id: { usd } }`) instead of `GET /api/crypto/prices` (aggregated format that ignores `ids` param) — fixes live prices in Portfolio, PriceTicker, and RealTimeCryptoGrid. Added LTC, XRP, DOGE to `smart_cache_service` major coin list.
 
 ### Training Results Summary (Feb 2026)
 
@@ -366,12 +377,12 @@ See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) f
 
 ### In Progress
 
-- WebSocket streaming integration in frontend
-- Retrain original 5 coins (BTC, ETH, LTC, XRP, DOGE) with Feb 26 improvements (MCDropout in attention layers + ensemble regime features)
+- WebSocket streaming integration in frontend (infrastructure complete, bypass in `useWebSocketStream.ts` needs debugging)
+- Alert delivery — alerts are stored but never triggered; needs background price-polling task + email/in-app notification
 
 ### Planned
 
-- Portfolio optimization with trained models
+- Portfolio optimization with trained models (allocation suggestions based on ML forecasts)
 - Automated retraining pipeline with drift detection
 - Mobile-responsive PWA
 - Cloud deployment (AWS/GCP)

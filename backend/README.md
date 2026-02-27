@@ -10,7 +10,7 @@ Crypto Forecast & Real‑Time Dashboard backend built with FastAPI. This documen
 - Crypto “dashboard” aggregator that pulls from multiple free sources.
 - Streaming endpoints (WebSocket + SSE) for live price updates.
 - Authentication (JWT) + OAuth (Google) for user accounts.
-- User features: alerts and watchlists.
+- User features: alerts, watchlists, and portfolio holdings.
 - Health/metrics/monitoring endpoints.
 - Rate limit monitoring, batching statistics, and optimization recommendations.
 - Admin endpoints for cache control and DB status.
@@ -107,12 +107,13 @@ Base API prefix is `/api` unless noted. OpenAPI docs live at `/docs` and `/redoc
 
 ### Prices & Market
 
-- `GET /api/prices` — price snapshot (cache JSON file)
+- `GET /api/prices?ids=bitcoin,ethereum&vs_currencies=usd` — **primary price endpoint** used by all frontend components. Reads from `prices_major_cryptos.json` cache, filters to requested IDs, returns CoinGecko simple-price format: `{ "bitcoin": { "usd": 67727 }, ... }`. Covers 14 coins: BTC, ETH, SOL, ADA, DOT, LINK, UNI, AVAX, MATIC, ATOM, BNB, LTC, XRP, DOGE.
 - `GET /api/prices/market` — market snapshot (cache JSON file)
 - `GET /api/prices/history/{coin_id}` — OHLC history
 - `GET /api/market/data` — market data (cache-first)
-- `GET /api/quick/prices` — emergency cache-only prices
+- `GET /api/quick/prices` — emergency cache-only prices (no query params)
 - `GET /api/quick/market` — emergency cache-only market data
+- `GET /api/crypto/prices` — **do not use for live prices**; returns a custom aggregated format `{ prices: {...}, market_data: [...] }` and ignores the `ids` parameter
 
 ### Forecasts
 
@@ -177,6 +178,11 @@ Base API prefix is `/api` unless noted. OpenAPI docs live at `/docs` and `/redoc
 - `DELETE /api/watchlist/{watchlist_id}`
 - `DELETE /api/watchlist/crypto/{crypto_symbol}`
 
+- `GET /api/portfolio/holdings` — list user's holdings (ordered by created_at desc)
+- `POST /api/portfolio/holdings` — add holding (409 if coin already in portfolio)
+- `PUT /api/portfolio/holdings/{holding_id}` — update amount and/or avg_buy_price
+- `DELETE /api/portfolio/holdings/{holding_id}` — remove holding
+
 ### Admin & Ops
 
 - `GET /api/cache/status`
@@ -200,6 +206,7 @@ Key SQLAlchemy models in `backend/app/models`:
 - Alerts
 - Assets + OHLCV
 - News sources + news articles
+- `PortfolioHolding` — per-user crypto holdings with `UniqueConstraint("user_id", "crypto_id")`, amount, avg_buy_price, created_at/updated_at. CASCADE-deleted when user is deleted.
 
 Migrations live in `backend/migrations`.
 
@@ -256,7 +263,7 @@ environment:
 
 ## Notes
 
-- Prices/market endpoints currently read from JSON cache files in `backend/app/data/cache`.
+- Prices/market endpoints read from JSON cache files in `backend/app/data/cache`. The primary file is `prices_major_cryptos.json` and is served by `GET /api/prices`. It covers 14 coins (BTC, ETH, SOL, ADA, DOT, LINK, UNI, AVAX, MATIC, ATOM, BNB, LTC, XRP, DOGE) and is refreshed on a schedule by `smart_cache_service._update_prices_cache()`.
 - Redis is optional; if `REDIS_URL` is not set or unavailable, in-memory cache is used.
 - Forecast ML models are optional and only available if `models/artifacts/manifest.json` exists and ML dependencies are installed. If unavailable, the forecast endpoint falls back to ARIMA/statistical models.
 - For ML models, the forecast API uses a 5-second CoinGecko fast-fetch timeout and falls back to prices embedded in the parquet feature data if CoinGecko is slow or rate-limited.

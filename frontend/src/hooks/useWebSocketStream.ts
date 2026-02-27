@@ -26,22 +26,37 @@ export function useWebSocketStream(options: UseWebSocketStreamOptions = {}) {
     reconnectInterval = 5000,
     maxReconnectAttempts = 5,
     fallbackToPolling = true,
-    pollingInterval = 15000, // 15 seconds for faster updates
+    pollingInterval = 15000,
   } = options;
 
   const [data, setData] = useState<StreamData | null>(null);
-  const [isConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reconnectCount, setReconnectCount] = useState(0);
   const [isFallbackMode, setIsFallbackMode] = useState(false);
-  const [lastAttemptTime, setLastAttemptTime] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs so callbacks always see current values without re-creating
+  const reconnectCountRef = useRef(0);
+  const isFallbackRef = useRef(false);
+  const enabledRef = useRef(enabled);
+  // Forward-ref so onclose can call connect() recursively
+  const connectRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const snapshotUrl = `${base}/api/stream/snapshot`;
+  const wsUrl = base
+    .replace(/^https:/, 'wss:')
+    .replace(/^http:/, 'ws:')
+    + '/api/stream/ws';
 
   const cleanup = useCallback(() => {
     if (wsRef.current) {
+      wsRef.current.onclose = null; // prevent onclose from firing reconnect after intentional close
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -55,146 +70,164 @@ export function useWebSocketStream(options: UseWebSocketStreamOptions = {}) {
     }
   }, []);
 
-  const snapshotUrl = `${API_BASE_URL.replace(/\/$/, '')}/stream/snapshot`;
-  const healthUrl = `${API_BASE_URL.replace(/\/$/, '')}/health/quick`;
-
   const startFallbackPolling = useCallback(() => {
-    console.log('Starting fallback polling mode');
-    
+    if (!fallbackToPolling) return;
+    isFallbackRef.current = true;
+    setIsFallbackMode(true);
+    console.log('[Stream] WebSocket unavailable — starting REST fallback polling');
+
     const poll = async () => {
+      if (!enabledRef.current || !isFallbackRef.current) return;
       try {
         const response = await fetch(snapshotUrl, {
-          signal: AbortSignal.timeout(60000) // 60 second timeout - backend may be slow on first load
+          signal: AbortSignal.timeout(60000),
         });
         if (response.ok) {
           const streamData: StreamData = await response.json();
-          
-          // Always set data, even if it's empty - this allows UI to render
           setData(streamData);
-          
-          // Only set error if there's an error field in the response
           if (streamData.type === 'error_snapshot' || (streamData as any).error) {
             setError((streamData as any).error || 'Failed to fetch price data');
-            console.error('Stream snapshot returned error:', (streamData as any).error);
           } else {
             setError(null);
-            const dataCount = streamData.data ? Object.keys(streamData.data).length : 0;
-            if (dataCount > 0) {
-              console.log(`✅ Fallback polling: Data updated successfully (${dataCount} cryptocurrencies)`);
-              console.log('Sample data:', Object.keys(streamData.data).slice(0, 3).map(id => ({
-                id,
-                price: streamData.data[id]?.price
-              })));
-            } else {
-              console.warn(`⚠️ Fallback polling: Received response but no cryptocurrency data (0 items)`);
-              console.warn('Response structure:', { type: streamData.type, hasData: !!streamData.data });
-            }
+            const count = streamData.data ? Object.keys(streamData.data).length : 0;
+            console.log(`[Poll] Updated ${count} coins`);
           }
         } else {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+          throw new Error(`HTTP ${response.status}`);
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('❌ Fallback polling error:', errorMessage);
-        
-        // Provide more helpful error messages
-        let userFriendlyError = errorMessage;
-        if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-          userFriendlyError = 'Backend is taking too long to respond. Please check if the backend server is running on port 8000.';
-        } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-          userFriendlyError = 'Cannot connect to backend server. Make sure it\'s running on http://127.0.0.1:8000';
-        }
-        
-        setError(userFriendlyError);
-        console.error('📡 Backend URL:', snapshotUrl);
-        console.error('💡 Tip: Check if the backend is running by visiting http://127.0.0.1:8000/health in your browser');
-        
-        // Set empty data structure so UI can still render
-        setData({
-          type: 'error',
-          data: {},
-          timestamp: Date.now() / 1000,
-        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[Poll] Error:', msg);
+        setError(msg);
+        setData({ type: 'error', data: {}, timestamp: Date.now() / 1000 });
       }
-
-      if (enabled && isFallbackMode) {
+      if (enabledRef.current && isFallbackRef.current) {
         fallbackTimeoutRef.current = setTimeout(poll, pollingInterval);
       }
     };
 
-    // Start polling immediately
     poll();
-  }, [enabled, isFallbackMode, pollingInterval, snapshotUrl]);
+  }, [fallbackToPolling, pollingInterval, snapshotUrl]);
 
-  const connectWebSocket = useCallback(() => {
-    if (!enabled || wsRef.current?.readyState === WebSocket.CONNECTING) {
-      return;
-    }
+  const connect = useCallback(() => {
+    if (!enabledRef.current) return;
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) return;
 
-    // Rate limiting: don't attempt too frequently
-    const now = Date.now();
-    if (now - lastAttemptTime < 10000) { // Wait at least 10 seconds between attempts
-      return;
-    }
-    setLastAttemptTime(now);
+    console.log(`[WS] Connecting to ${wsUrl}`);
 
-    cleanup();
-    
-    // First check if backend is available before attempting WebSocket
-    // Use longer timeout and don't block - just go straight to polling
-    fetch(healthUrl, {
-      signal: AbortSignal.timeout(30000) // 30 second timeout for health check
-    })
-      .then(response => {
-        if (!response.ok) {
-          console.log('Backend not ready, switching to fallback mode');
-          setIsFallbackMode(true);
-          startFallbackPolling();
-          return;
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('[WS] Connected');
+        setIsConnected(true);
+        setError(null);
+        // If fallback was running, stop it
+        isFallbackRef.current = false;
+        setIsFallbackMode(false);
+        if (fallbackTimeoutRef.current) {
+          clearTimeout(fallbackTimeoutRef.current);
+          fallbackTimeoutRef.current = null;
         }
-        
-        // For now, skip WebSocket and go directly to fallback mode
-        // WebSocket has connection issues, fallback polling works perfectly
-        console.log('Using fallback polling mode for reliable data streaming');
-        setIsFallbackMode(true);
-        startFallbackPolling();
-        
-      })
-      .catch(() => {
-        console.log('Backend not ready, using fallback polling mode');
-        setIsFallbackMode(true);
-        startFallbackPolling();
-      });
-  }, [enabled, reconnectCount, maxReconnectAttempts, reconnectInterval, fallbackToPolling, isFallbackMode, cleanup, startFallbackPolling, healthUrl]);
+        reconnectCountRef.current = 0;
+        setReconnectCount(0);
+      };
 
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data as string);
+
+          if (msg.type === 'price_update') {
+            // Format: { bitcoin: { price, change_24h, market_cap, volume_24h } }
+            setData({ type: msg.type, data: msg.data, timestamp: msg.timestamp });
+            setError(null);
+          } else if (msg.type === 'initial_prices') {
+            // Backend sends CoinGecko simple-price format: { bitcoin: { usd: 67000 } }
+            // Convert to StreamData format
+            const converted: StreamData['data'] = {};
+            for (const [id, val] of Object.entries(
+              msg.data as Record<string, { usd: number }>
+            )) {
+              converted[id] = {
+                price: val.usd ?? 0,
+                change_24h: 0,
+                market_cap: 0,
+                volume_24h: 0,
+              };
+            }
+            setData({ type: 'initial_prices', data: converted, timestamp: msg.timestamp });
+          } else if (msg.type === 'error') {
+            setError(msg.message);
+          }
+          // 'connection_established' is informational only
+        } catch (e) {
+          console.error('[WS] Failed to parse message:', e);
+        }
+      };
+
+      ws.onerror = () => {
+        console.warn('[WS] Connection error');
+        setIsConnected(false);
+      };
+
+      ws.onclose = (event) => {
+        console.log(`[WS] Disconnected (code ${event.code})`);
+        setIsConnected(false);
+        wsRef.current = null;
+
+        if (!enabledRef.current) return;
+
+        const attempts = reconnectCountRef.current + 1;
+        reconnectCountRef.current = attempts;
+        setReconnectCount(attempts);
+
+        if (attempts <= maxReconnectAttempts) {
+          console.log(
+            `[WS] Reconnect attempt ${attempts}/${maxReconnectAttempts} in ${reconnectInterval}ms`
+          );
+          reconnectTimeoutRef.current = setTimeout(
+            () => connectRef.current?.(),
+            reconnectInterval
+          );
+        } else {
+          console.log('[WS] Max reconnect attempts reached — falling back to polling');
+          startFallbackPolling();
+        }
+      };
+    } catch (e) {
+      console.error('[WS] Failed to create WebSocket:', e);
+      startFallbackPolling();
+    }
+  }, [wsUrl, maxReconnectAttempts, reconnectInterval, startFallbackPolling]);
+
+  // Keep forward-ref current so onclose can reconnect
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
+  // Start on mount / when enabled changes
   useEffect(() => {
     if (!enabled) {
       return cleanup;
     }
-
-    // Always start with fallback polling for immediate data
-    // WebSocket can be added later if needed
-    if (!isFallbackMode) {
-      setIsFallbackMode(true);
-    }
-    
-    // Start polling immediately with a small delay to avoid race conditions
-    const timer = setTimeout(() => {
-      startFallbackPolling();
-    }, 100);
-
-    return () => {
-      cleanup();
-      clearTimeout(timer);
-    };
-  }, [enabled, isFallbackMode, startFallbackPolling, cleanup]);
+    connect();
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   const reconnect = useCallback(() => {
+    cleanup();
+    reconnectCountRef.current = 0;
     setReconnectCount(0);
+    isFallbackRef.current = false;
     setIsFallbackMode(false);
-    connectWebSocket();
-  }, [connectWebSocket]);
+    setIsConnected(false);
+    connect();
+  }, [cleanup, connect]);
 
   return {
     data,

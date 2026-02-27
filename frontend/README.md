@@ -6,7 +6,7 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 
 - Single‑page dashboard with in-app page switching (no react-router).
 - **Public landing page** — hero section ("The Future of Crypto Intelligence") is visible without signing in. Forecasts, News, Watchlist, and Portfolio are auth-gated: clicking them while signed out opens the sign-in modal.
-- Real‑time crypto grid with streaming + polling fallback.
+- Real‑time crypto grid with WebSocket streaming and automatic REST polling fallback.
 - Forecasting UI with real trained ML models (LightGBM, LSTM, Transformer, TCN, DLinear) replacing the previous ARIMA/ETS/SARIMA placeholders.
 - News feed with sentiment highlights and pagination.
 - User auth (JWT) + OAuth callback handling.
@@ -108,12 +108,12 @@ From `frontend/src/lib/api.ts` and hooks:
   - `PUT /api/portfolio/holdings/{id}`
   - `DELETE /api/portfolio/holdings/{id}`
 - Streaming:
-  - `GET /stream/snapshot` (polling fallback)
-  - `GET /health/quick` (streaming preflight)
+  - `WS /api/stream/ws` (primary — real-time price updates)
+  - `GET /api/stream/snapshot` (fallback polling after max reconnect attempts)
 
 ## Streaming Behavior
 
-The `useWebSocketStream` hook currently defaults to polling `GET /stream/snapshot` and uses `GET /health/quick` as a readiness check. WebSocket support is scaffolded but intentionally bypassed for reliability.
+The `useWebSocketStream` hook connects to `WS /api/stream/ws` on mount. On success it receives an `initial_prices` snapshot immediately followed by `price_update` messages every 15 seconds. On disconnect it retries up to 5 times (5-second backoff) before falling back to polling `GET /api/stream/snapshot` every 15 seconds. `isConnected` reflects live WebSocket state; `isFallbackMode` is `true` only when polling is active.
 
 ## Environment Variables
 

@@ -43,12 +43,20 @@ const SettingsPage: React.FC = () => {
     confirm_password: '',
   });
 
-  // Notification settings state
-  const [notifications, setNotifications] = useState<NotificationSettings>({
+  // Notification settings state — initialised from persisted user preferences
+  const defaultNotifications: NotificationSettings = {
     email_notifications: true,
     price_alerts: true,
     forecast_updates: true,
     news_updates: false,
+  };
+  const [notifications, setNotifications] = useState<NotificationSettings>(() => {
+    try {
+      const saved = user?.preferences ? JSON.parse(user.preferences) : null;
+      return saved ? { ...defaultNotifications, ...saved } : defaultNotifications;
+    } catch {
+      return defaultNotifications;
+    }
   });
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -126,11 +134,8 @@ const SettingsPage: React.FC = () => {
 
   const handleNotificationSave = async () => {
     setIsLoading(true);
-
     try {
-      // TODO: Implement API call to save notification preferences
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
-
+      await apiClient.updateProfile({ preferences: JSON.stringify(notifications) });
       toast({
         title: "Preferences Saved",
         description: "Your notification preferences have been saved.",

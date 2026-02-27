@@ -13,6 +13,7 @@ export interface User {
   is_verified: boolean;
   created_at: string;
   last_login?: string;
+  preferences?: string; // JSON string — parsed in SettingsPage
 }
 
 export interface AuthTokens {

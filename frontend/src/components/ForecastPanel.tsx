@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { useToast } from '../hooks/use-toast';
@@ -197,6 +197,18 @@ function ForecastPanel() {
   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('All');
 
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState<{ cryptoId: string; cryptoSymbol: string; cryptoName: string; currentPrice: number } | null>(null);
+  const [alertForm, setAlertForm] = useState<{ targetPrice: string; condition: 'above' | 'below' }>({ targetPrice: '', condition: 'above' });
+  const [isSubmittingAlert, setIsSubmittingAlert] = useState(false);
+
+  // Pre-fill target price when modal opens
+  useEffect(() => {
+    if (alertModal) {
+      setAlertForm({ targetPrice: alertModal.currentPrice.toFixed(2), condition: 'above' });
+    }
+  }, [alertModal]);
+
   const { data: forecastData, isLoading, error, refetch } = useQuery<ForecastData>({
     queryKey: ['forecasts', selectedCryptos.join(','), forecastDays, selectedModel],
     queryFn: () => apiClient.getForecasts(selectedCryptos, forecastDays, selectedModel),
@@ -287,58 +299,40 @@ function ForecastPanel() {
     }
   };
 
-  // Handler for setting alert
-  const handleSetAlert = async (e: React.MouseEvent, crypto: any) => {
+  // Handler for setting alert — opens the modal
+  const handleSetAlert = (e: React.MouseEvent, crypto: any) => {
     e.stopPropagation();
-
-    console.log('Setting alert for crypto:', crypto);
-
-    // Get current price for the alert - fallback to forecast price if real-time fails
     const currentPriceData = realTimePrices?.[crypto.id];
-    const realTimePrice = currentPriceData?.usd;
-    const forecastPrice = forecastData?.forecasts?.[crypto.id]?.current_price;
-    const currentPrice = realTimePrice || forecastPrice || 0;
+    const currentPrice = currentPriceData?.usd || forecastData?.forecasts?.[crypto.id]?.current_price || 0;
+    setAlertModal({
+      cryptoId: crypto.id,
+      cryptoSymbol: getCryptoSymbol(crypto.id),
+      cryptoName: getCryptoDisplayName(crypto.id),
+      currentPrice,
+    });
+  };
 
-    console.log('Real time price:', realTimePrice);
-    console.log('Forecast price:', forecastPrice);
-    console.log('Using current price:', currentPrice);
-
-    if (!currentPrice) {
-      toast({
-        title: "Error",
-        description: "Unable to get current price. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSubmitAlert = async () => {
+    if (!alertModal) return;
+    const target = parseFloat(alertForm.targetPrice);
+    if (isNaN(target) || target <= 0) return;
+    setIsSubmittingAlert(true);
     try {
-      // Set a basic price alert 5% above current price
-      const targetPrice = currentPrice * 1.05;
-
       await apiClient.createAlert({
-        crypto_symbol: getCryptoSymbol(crypto.id),
-        crypto_name: getCryptoDisplayName(crypto.id),
+        crypto_symbol: alertModal.cryptoSymbol,
+        crypto_name: alertModal.cryptoName,
         alert_type: 'price_target',
-        target_price: targetPrice,
-        condition: 'above',
-        message: `Alert when ${getCryptoDisplayName(crypto.id)} reaches $${targetPrice.toFixed(2)}`
+        target_price: target,
+        condition: alertForm.condition,
+        message: `Alert when ${alertModal.cryptoName} goes ${alertForm.condition} $${target.toFixed(2)}`,
       });
-
-      // Invalidate alerts cache to refresh any alerts page
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
-
-      toast({
-        title: "Alert Set",
-        description: `Price alert set for ${getCryptoDisplayName(crypto.id)} at $${targetPrice.toFixed(2)}`,
-      });
-    } catch (error: any) {
-      console.error('Error setting alert:', error);
-      toast({
-        title: "Error",
-        description: "Failed to set alert. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: 'Alert Created', description: `${alertModal.cryptoSymbol} ${alertForm.condition} $${target.toFixed(2)}` });
+      setAlertModal(null);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create alert.', variant: 'destructive' });
+    } finally {
+      setIsSubmittingAlert(false);
     }
   };
 
@@ -1397,6 +1391,128 @@ function ForecastPanel() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Modal */}
+      {alertModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setAlertModal(null)}
+          />
+          {/* Modal */}
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-gray-900 dark:text-gray-100">Set Price Alert</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{alertModal.cryptoName} ({alertModal.cryptoSymbol})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAlertModal(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Current Price */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Current Price</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">{formatPrice(alertModal.currentPrice)}</span>
+              </div>
+
+              {/* Condition */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Alert Condition
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAlertForm(f => ({ ...f, condition: 'above' }))}
+                    className={`py-3 px-4 rounded-xl font-semibold text-sm border-2 transition-all ${
+                      alertForm.condition === 'above'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    ↑ Price goes above
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlertForm(f => ({ ...f, condition: 'below' }))}
+                    className={`py-3 px-4 rounded-xl font-semibold text-sm border-2 transition-all ${
+                      alertForm.condition === 'below'
+                        ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    ↓ Price goes below
+                  </button>
+                </div>
+              </div>
+
+              {/* Target Price */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Target Price (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    value={alertForm.targetPrice}
+                    onChange={e => setAlertForm(f => ({ ...f, targetPrice: e.target.value }))}
+                    className="w-full pl-7 pr-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none transition-colors"
+                    placeholder="0.00"
+                    min="0"
+                    step="any"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => setAlertModal(null)}
+                  className="flex-1 py-3 px-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitAlert}
+                  disabled={isSubmittingAlert || !alertForm.targetPrice || parseFloat(alertForm.targetPrice) <= 0}
+                  className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-blue-800 text-white rounded-xl font-semibold transition-colors flex items-center justify-center space-x-2"
+                >
+                  {isSubmittingAlert ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      <span>Create Alert</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

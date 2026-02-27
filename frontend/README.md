@@ -10,7 +10,8 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 - Forecasting UI with real trained ML models (LightGBM, LSTM, Transformer, TCN, DLinear) replacing the previous ARIMA/ETS/SARIMA placeholders.
 - News feed with sentiment highlights and pagination.
 - User auth (JWT) + OAuth callback handling.
-- Watchlist + alerts management UI.
+- Watchlist management UI.
+- **Alerts management** — full create/delete alert UI. `AlertsPage` has a "+ New Alert" button that expands an inline form (15-coin dropdown, above/below condition toggle, target price input). Each alert card shows status badge, target price, condition, and creation/triggered timestamps. `ForecastPanel` "Set Alert" button now opens a modal with the current live price pre-filled, a condition toggle, and an editable target price — replacing the previous silent auto-create-at-+5% behavior.
 - **Portfolio tracker** — full CRUD holdings manager backed by real API. Displays live prices via CoinGecko, calculates total portfolio value, total cost basis, and overall P&L per holding. Supports adding (15-coin dropdown), inline editing amount/avg buy price, and removing holdings. Loading, error, and empty states included.
 - Global error boundaries, loading/skeleton states, and toasts.
 
@@ -40,7 +41,7 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 - News (`NewsPage` + `NewsPanel`): **requires sign-in**
 - Watchlist (`WatchlistPage`): **requires sign-in**
 - Portfolio (`PortfolioPage`): **requires sign-in** — live holdings table with P&L, add/edit/delete per row, summary cards (total value, total cost, total gain/loss). Uses `usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding` hooks backed by real REST API.
-- Alerts: `AlertsPage`
+- Alerts (`AlertsPage`): **requires sign-in** — lists active/triggered/expired alerts with status badges and timestamps. "+ New Alert" button in page header opens a collapsible inline form: coin dropdown (15 options), above/below condition toggle, target price input. "Set Alert" button on `ForecastPanel` coin cards opens a modal overlay: shows current live price, condition toggle, editable target price, Cancel/Create buttons.
 - Settings: `SettingsPage`
 - Markets (`MarketsPage`): accessible via app routing but **removed from the nav bar** (charting widgets had no data source).
 

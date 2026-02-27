@@ -348,6 +348,7 @@ Full interactive docs at `http://localhost:8000/docs` (Swagger UI).
 - **Original 5 Coins Retrained (Feb 26)** — BTC, ETH, LTC, XRP, DOGE retrained with both Feb 26 fixes applied: MCDropout in attention layers produces non-zero transformer CI; ensemble meta-learner trained with rolling regime features.
 - **Portfolio Backend + Frontend (Feb 26)** — Full-stack portfolio holdings tracker. SQLAlchemy `PortfolioHolding` model with per-user UniqueConstraint, CRUD API (`GET/POST/PUT/DELETE /api/portfolio/holdings`), Alembic migration, React Query hooks (`usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding`), and live portfolio page with real prices, P&L calculations, inline add/edit/delete UI, and loading/error/empty states. Replaced all hardcoded mock data.
 - **Portfolio Navigation + Prices Fix (Feb 27)** — Portfolio added to nav bar and user dropdown; Markets removed from nav (no data source). `PROTECTED_PAGES` updated to `['forecasts', 'news', 'watchlist', 'portfolio']`. Fixed `apiClient.getPrices()` to call `GET /api/prices` (correct cache-backed endpoint returning `{ coin_id: { usd } }`) instead of `GET /api/crypto/prices` (aggregated format that ignores `ids` param) — fixes live prices in Portfolio, PriceTicker, and RealTimeCryptoGrid. Added LTC, XRP, DOGE to `smart_cache_service` major coin list.
+- **Alert Delivery + Alert UI (Feb 27)** — Full end-to-end alert pipeline. Backend: `alert_checker.py` APScheduler job (default every 5 min) polls `prices_major_cryptos.json`, evaluates all `ACTIVE PRICE_TARGET` alerts, sets `status=TRIGGERED` in DB, and dispatches email via `notification_service.py` (HTML email, async `smtplib` via `asyncio.to_thread`, silent no-op if SMTP not configured). Frontend: `ForecastPanel` "Set Alert" button now opens a modal (live price preview, above/below toggle, editable target price) instead of silently creating an alert at +5%. `AlertsPage` gains a "+ New Alert" button that expands an inline form with coin dropdown (15 options), condition toggle, and target price field.
 
 ### Training Results Summary (Feb 2026)
 
@@ -378,7 +379,6 @@ See [Model Architecture & Training](models/MODEL_ARCHITECTURE_AND_TRAINING.md) f
 ### In Progress
 
 - WebSocket streaming integration in frontend (infrastructure complete, bypass in `useWebSocketStream.ts` needs debugging)
-- Alert delivery — alerts are stored but never triggered; needs background price-polling task + email/in-app notification
 
 ### Planned
 

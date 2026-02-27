@@ -31,6 +31,7 @@ try:
     from .api.dependencies.rate_limiter import limiter
     from .services.smart_cache_service import smart_cache
     from .services.rate_limit_manager import rate_limit_manager
+    from .services.alert_checker import check_and_trigger_alerts
 except ImportError:
     # When running as script, use absolute imports
     from config import get_settings, Settings
@@ -46,11 +47,13 @@ except ImportError:
     from api.dependencies.rate_limiter import limiter  # type: ignore
     from services.smart_cache_service import smart_cache
     from services.rate_limit_manager import rate_limit_manager
+    from services.alert_checker import check_and_trigger_alerts
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Import connection pool and circuit breaker
 try:
@@ -96,12 +99,37 @@ async def lifespan(app: FastAPI):
         print("[WARNING] Rate limit manager startup timed out, continuing anyway")
     except Exception as e:
         print(f"[WARNING] Rate limit manager startup failed: {e}, continuing anyway")
-    
+
+    print("[STARTUP] Starting alert checker scheduler...")
+    alert_scheduler = AsyncIOScheduler(timezone="UTC")
+    try:
+        settings = get_settings()
+        interval = settings.alert_check_interval_seconds
+        alert_scheduler.add_job(
+            check_and_trigger_alerts,
+            "interval",
+            seconds=interval,
+            id="alert_checker",
+            max_instances=1,
+            coalesce=True,
+        )
+        alert_scheduler.start()
+        print(f"[STARTUP] Alert checker scheduled every {interval}s")
+    except Exception as e:
+        print(f"[WARNING] Alert scheduler startup failed: {e}, continuing anyway")
+
     print("[STARTUP] Backend ready - FIX APPLIED: sync endpoints, instant response, no buffering!")
-    
+
     yield
-    
+
     # Shutdown
+    print("[SHUTDOWN] Stopping alert scheduler...")
+    try:
+        if alert_scheduler.running:
+            alert_scheduler.shutdown(wait=False)
+    except Exception as e:
+        print(f"[WARNING] Alert scheduler shutdown failed: {e}")
+
     print("[SHUTDOWN] Cleaning up connection pool...")
     try:
         await asyncio.wait_for(connection_pool.close(), timeout=5.0)

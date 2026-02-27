@@ -10,7 +10,7 @@ Crypto Forecast & Real‑Time Dashboard backend built with FastAPI. This documen
 - Crypto “dashboard” aggregator that pulls from multiple free sources.
 - Streaming endpoints (WebSocket + SSE) for live price updates.
 - Authentication (JWT) + OAuth (Google) for user accounts.
-- User features: alerts, watchlists, and portfolio holdings.
+- User features: alerts with background delivery, watchlists, and portfolio holdings.
 - Health/metrics/monitoring endpoints.
 - Rate limit monitoring, batching statistics, and optimization recommendations.
 - Admin endpoints for cache control and DB status.
@@ -56,6 +56,8 @@ Service modules live in `backend/app/services`:
 - `rate_limit_manager` + `request_batcher`: API usage tracking + batching insights
 - `health_monitor`: system health + trends
 - `prometheus_metrics`: metrics export
+- `alert_checker`: background job (APScheduler, default every 5 min) that loads `prices_major_cryptos.json`, evaluates all `ACTIVE` `PRICE_TARGET` alerts against current prices, sets `status=TRIGGERED / is_active=False` on match, and calls `notification_service` to dispatch the email. Also expires stale alerts past their `expires_at`.
+- `notification_service`: async SMTP email delivery for triggered alerts. Builds an HTML email with gradient header and price display. Uses `asyncio.to_thread` around `smtplib` so email dispatch is non-blocking. Silently no-ops when `SMTP_HOST` / `SMTP_USER` are not configured.
 - `oauth_service`: OAuth flows
 - `sentry_config`: error tracking
 
@@ -225,6 +227,8 @@ Loaded via `backend/app/config.py` (Pydantic settings). Common vars:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REDIRECT_URI`
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_TLS` — email delivery for triggered alerts (leave `SMTP_HOST` empty to disable; Gmail users: set `SMTP_PASSWORD` to a 16-char App Password)
+- `ALERT_CHECK_INTERVAL_SECONDS` — how often the alert checker runs (default 300 s)
 - `RATE_LIMIT_*` (see `config.py` for full list)
 
 ## Run Locally

@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     google_client_secret: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str = Field(default="http://localhost:3000/oauth/callback/google", alias="GOOGLE_REDIRECT_URI")
 
+    # Email / SMTP (for alert notifications)
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from: str = Field(default="", alias="SMTP_FROM")
+    smtp_tls: bool = Field(default=True, alias="SMTP_TLS")
+    alert_check_interval_seconds: int = Field(default=300, alias="ALERT_CHECK_INTERVAL_SECONDS")
+
     # API rate limiting (slowapi)
     rate_limit_default: str = Field(default="120/minute", alias="RATE_LIMIT_DEFAULT")
     rate_limit_prices: str = Field(default="60/minute", alias="RATE_LIMIT_PRICES")

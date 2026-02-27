@@ -234,6 +234,9 @@ class SmartCacheService:
             "matic-network",
             "cosmos",
             "binancecoin",
+            "litecoin",
+            "ripple",
+            "dogecoin",
         ]
         existing = self._strip_metadata(await self._load_cached_data("prices", "major_cryptos"))
         
@@ -301,6 +304,9 @@ class SmartCacheService:
             "matic-network",
             "cosmos",
             "binancecoin",
+            "litecoin",
+            "ripple",
+            "dogecoin",
         ]
         existing = self._strip_metadata(await self._load_cached_data("market_data", "major_cryptos"))
         

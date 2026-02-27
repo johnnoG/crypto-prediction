@@ -216,3 +216,34 @@ class WatchlistResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Portfolio Schemas
+class PortfolioHoldingCreate(BaseModel):
+    """Schema for adding a portfolio holding."""
+    crypto_id: str = Field(..., min_length=1, max_length=50, description="CoinGecko ID")
+    crypto_symbol: str = Field(..., min_length=1, max_length=20)
+    crypto_name: str = Field(..., min_length=1, max_length=100)
+    amount: float = Field(..., gt=0, description="Quantity held")
+    avg_buy_price: float = Field(..., gt=0, description="Average buy price in USD")
+
+
+class PortfolioHoldingUpdate(BaseModel):
+    """Schema for updating a portfolio holding."""
+    amount: Optional[float] = Field(None, gt=0)
+    avg_buy_price: Optional[float] = Field(None, gt=0)
+
+
+class PortfolioHoldingResponse(BaseModel):
+    """Schema for portfolio holding response."""
+    id: int
+    crypto_id: str
+    crypto_symbol: str
+    crypto_name: str
+    amount: float
+    avg_buy_price: float
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

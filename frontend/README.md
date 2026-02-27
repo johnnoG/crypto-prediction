@@ -42,7 +42,7 @@ Crypto Forecast & Real‑Time Dashboard frontend built with React + Vite. This d
 - Watchlist (`WatchlistPage`): **requires sign-in**
 - Portfolio (`PortfolioPage`): **requires sign-in** — live holdings table with P&L, add/edit/delete per row, summary cards (total value, total cost, total gain/loss). Uses `usePortfolio`, `useAddHolding`, `useUpdateHolding`, `useDeleteHolding` hooks backed by real REST API.
 - Alerts (`AlertsPage`): **requires sign-in** — lists active/triggered/expired alerts with status badges and timestamps. "+ New Alert" button in page header opens a collapsible inline form: coin dropdown (15 options), above/below condition toggle, target price input. "Set Alert" button on `ForecastPanel` coin cards opens a modal overlay: shows current live price, condition toggle, editable target price, Cancel/Create buttons.
-- Settings: `SettingsPage`
+- Settings (`SettingsPage`): profile update, password change, notification preferences (persisted via `PUT /api/auth/me` → `User.preferences` JSON column; loaded from `user.preferences` on mount), account deletion
 - Markets (`MarketsPage`): accessible via app routing but **removed from the nav bar** (charting widgets had no data source).
 
 ### Auth-gated Navigation (`Header.tsx`)
